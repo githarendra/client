@@ -103,20 +103,38 @@ export default function Host() {
     }
   };
 
-  const startBroadcast = async () => {
-    const video = videoRef.current; if (!video) return;
-    try { 
-        video.pause();
-        const stream = video.captureStream(30); 
-        streamRef.current = stream; 
-        
-        setIsBroadcasting(true); 
-        setStatus("BROADCASTING (PAUSED)"); 
-        
-        socket.emit('host-started-stream', roomId); 
-        socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
+const startBroadcast = async () => {
+    setIsBroadcasting(true);
+    setStatus("BROADCASTING (PAUSED)");
+    socket.emit('host-started-stream', roomId); 
+    
+    // File Mode Setup
+    if (mediaType === 'FILE' && videoRef.current) {
+        try { 
+            videoRef.current.pause();
+            
+            // --- FIX: Cross-Browser Support ---
+            let stream;
+            if (videoRef.current.captureStream) {
+                stream = videoRef.current.captureStream(30);
+            } else if (videoRef.current.mozCaptureStream) {
+                stream = videoRef.current.mozCaptureStream(30);
+            } else {
+                throw new Error("Your browser does not support video capturing. Please use Chrome.");
+            }
+            // ----------------------------------
 
-    } catch (err) { alert(err.message); }
+            streamRef.current = stream; 
+        } catch (err) { 
+            console.error(err);
+            alert("Error starting stream: " + err.message); 
+            setIsBroadcasting(false);
+            setStatus("Error");
+        }
+    }
+    
+    // Initial Sync
+    handleSync('PAUSE');
   };
 
   const stopBroadcast = () => {
