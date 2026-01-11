@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Peer from 'peerjs';
 import io from 'socket.io-client';
-import ReactPlayer from 'react-player';
 import Chat from './Chat';
 
 // ✅ CONNECT TO RENDER
@@ -17,17 +16,11 @@ export default function Host() {
   const [users, setUsers] = useState([]);
   const [showUserPanel, setShowUserPanel] = useState(false);
 
-  // MEDIA STATES
-  const [mediaType, setMediaType] = useState('FILE'); // 'FILE' or 'URL'
-  const [mediaUrl, setMediaUrl] = useState('');
-  const urlInputRef = useRef();
-
   const [fileSelected, setFileSelected] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [showChat, setShowChat] = useState(true);
   
   const videoRef = useRef();
-  const playerRef = useRef();
   const myPeer = useRef();
   const streamRef = useRef(null);
   const nameInputRef = useRef();
@@ -54,7 +47,7 @@ export default function Host() {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
       secure: true,
-      path: '/peerjs' // Changed from '/peerjs/myapp' to fix 404
+      path: '/peerjs' 
     });
 
     myPeer.current.on('open', (id) => {
@@ -68,10 +61,13 @@ export default function Host() {
     });
     
     socket.on('user-connected', (userId) => {
-      if (mediaType === 'FILE' && streamRef.current) {
+      if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
+          if(videoRef.current) {
+              const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
+              socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
+          }
       }
-      handleSync('PAUSE');
     });
 
     return () => {
@@ -79,7 +75,7 @@ export default function Host() {
         socket.off('update-user-list');
         if(myPeer.current) myPeer.current.destroy();
     }
-  }, [isLoggedIn, roomId, mediaType]); 
+  }, [isLoggedIn, roomId]);
 
   const connectToNewUser = (userId, stream) => {
       if (calledPeers.current[userId]) return;
@@ -103,51 +99,38 @@ export default function Host() {
     if (file) {
       const url = URL.createObjectURL(file);
       setFileSelected(true);
-      setMediaType('FILE');
-      socket.emit('change-media', { roomId, type: 'FILE', src: null });
-      setTimeout(() => { if(videoRef.current) { videoRef.current.src = url; setStatus("Ready (File)"); }}, 50);
+      setTimeout(() => { if(videoRef.current) { videoRef.current.src = url; setStatus("Ready"); }}, 50);
     }
-  };
-
-  const handleLoadUrl = (e) => {
-      e.preventDefault();
-      const url = urlInputRef.current.value;
-      if(url) {
-          setFileSelected(true);
-          setMediaType('URL');
-          setMediaUrl(url);
-          setStatus("Ready (URL)");
-          socket.emit('change-media', { roomId, type: 'URL', src: url });
-      }
   };
 
   const startBroadcast = async () => {
-    setIsBroadcasting(true);
-    setStatus("BROADCASTING (PAUSED)");
-    socket.emit('host-started-stream', roomId); 
-    
-    if (mediaType === 'FILE' && videoRef.current) {
-        try { 
-            videoRef.current.pause();
-            
-            // ✅ FIX: SUPPORT FIREFOX & CHROME
-            let stream;
-            if (videoRef.current.captureStream) {
-                stream = videoRef.current.captureStream(30);
-            } else if (videoRef.current.mozCaptureStream) {
-                stream = videoRef.current.mozCaptureStream(30);
-            } else {
-                throw new Error("Browser not supported for streaming. Use Chrome/Firefox.");
-            }
-
-            streamRef.current = stream; 
-        } catch (err) { 
-            alert(err.message); 
-            setIsBroadcasting(false);
+    const video = videoRef.current; if (!video) return;
+    try { 
+        video.pause();
+        
+        // ✅ SUPPORT FIREFOX & CHROME
+        let stream;
+        if (video.captureStream) {
+            stream = video.captureStream(30);
+        } else if (video.mozCaptureStream) {
+            stream = video.mozCaptureStream(30);
+        } else {
+            throw new Error("Browser not supported. Use Chrome or Firefox.");
         }
-    }
-    
-    handleSync('PAUSE');
+        
+        streamRef.current = stream; 
+        
+        setIsBroadcasting(true); 
+        setStatus("BROADCASTING (PAUSED)"); 
+        
+        socket.emit('host-started-stream', roomId); 
+        socket.emit('video-sync', { 
+            roomId, 
+            type: 'PAUSE', 
+            time: video.currentTime 
+        });
+
+    } catch (err) { alert(err.message); }
   };
 
   const stopBroadcast = () => {
@@ -158,14 +141,10 @@ export default function Host() {
   };
   
   const handleSync = (type) => { 
-      if(!isBroadcasting && type === 'PAUSE') return;
-
-      let time = 0;
-      if (mediaType === 'FILE' && videoRef.current) time = videoRef.current.currentTime;
-      else if (mediaType === 'URL' && playerRef.current) time = playerRef.current.getCurrentTime();
-
-      socket.emit('video-sync', { roomId, type, time }); 
-      if(isBroadcasting) setStatus(type === 'PLAY' ? "BROADCASTING LIVE" : "BROADCASTING (PAUSED)");
+      if(videoRef.current) {
+          socket.emit('video-sync', { roomId, type, time: videoRef.current.currentTime }); 
+          if(isBroadcasting) setStatus(type === 'PLAY' ? "BROADCASTING LIVE" : "BROADCASTING (PAUSED)");
+      }
   };
 
   if (!isLoggedIn) {
@@ -207,56 +186,20 @@ export default function Host() {
                 </div>
             </div>
           )}
-          
-          <video 
-             ref={videoRef} 
-             controls 
-             className={`h-full w-full object-contain ${mediaType !== 'FILE' || !fileSelected ? 'hidden' : ''}`}
-             onPause={() => handleSync('PAUSE')} 
-             onPlay={() => handleSync('PLAY')} 
-          />
-
-          {mediaType === 'URL' && mediaUrl && (
-             <div className="w-full h-full">
-                 <ReactPlayer 
-                    ref={playerRef}
-                    url={mediaUrl}
-                    width="100%"
-                    height="100%"
-                    controls={true}
-                    playing={isBroadcasting}
-                    onPause={() => handleSync('PAUSE')}
-                    onPlay={() => handleSync('PLAY')}
-                 />
-             </div>
+          {!fileSelected ? (
+            <div className="text-neutral-600 text-center"><p className="text-5xl mb-4">🎬</p><p className="text-xl">Select a video to begin</p></div>
+          ) : (
+            <video ref={videoRef} controls className="h-full w-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
           )}
-
-          {!fileSelected && mediaType === 'FILE' && (
-             <div className="text-neutral-600 text-center"><p className="text-5xl mb-4">🎬</p><p className="text-xl">Select a video or load a URL</p></div>
-          )}
-
         </div>
         <div className={`${showChat ? 'block' : 'hidden'} h-full`}><Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} /></div>
       </div>
-      <div className="h-20 flex items-center justify-center gap-4 bg-neutral-900 border-t border-neutral-800 shrink-0 z-50 px-6">
-        
-        <label className={`cursor-pointer bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-lg font-bold transition flex items-center gap-2 text-sm ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
-            📂 File <input type="file" accept="video/mp4" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
-        </label>
-
-        <span className="text-neutral-600 text-xs uppercase font-bold">OR</span>
-
-        <form onSubmit={handleLoadUrl} className="flex gap-2">
-            <input ref={urlInputRef} type="text" placeholder="YouTube Link..." className="bg-black border border-neutral-700 text-white px-3 py-2 rounded text-sm w-48 focus:border-blue-500 outline-none" disabled={isBroadcasting} />
-            <button type="submit" disabled={isBroadcasting} className="bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-2 rounded text-sm font-bold disabled:opacity-50">Load</button>
-        </form>
-
-        <div className="h-8 w-px bg-neutral-700 mx-2"></div>
-
+      <div className="h-20 flex items-center justify-center gap-4 bg-neutral-900 border-t border-neutral-800 shrink-0 z-50">
+        <label className={`cursor-pointer bg-neutral-800 hover:bg-neutral-700 text-white px-5 py-2.5 rounded-lg font-bold transition flex items-center gap-2 text-sm ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>📂 Load Movie <input type="file" accept="video/mp4" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} /></label>
         {!isBroadcasting ? (
-            <button onClick={startBroadcast} disabled={!fileSelected} className={`px-5 py-2.5 rounded-lg font-bold transition text-sm ${fileSelected ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'}`}>Start</button>
+            <button onClick={startBroadcast} disabled={!fileSelected} className={`px-5 py-2.5 rounded-lg font-bold transition text-sm ${fileSelected ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'}`}>Start Broadcast</button>
         ) : (
-            <button onClick={stopBroadcast} className="px-5 py-2.5 rounded-lg font-bold transition text-sm bg-red-600 hover:bg-red-500 text-white animate-pulse">⏹ Stop</button>
+            <button onClick={stopBroadcast} className="px-5 py-2.5 rounded-lg font-bold transition text-sm bg-red-600 hover:bg-red-500 text-white animate-pulse">⏹ Stop Broadcast</button>
         )}
       </div>
     </div>
