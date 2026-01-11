@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Peer from 'peerjs';
 import io from 'socket.io-client';
-import ReactPlayer from 'react-player';
 import Chat from './Chat';
 
 // ✅ CONNECT TO RENDER
@@ -18,15 +17,11 @@ export default function Viewer() {
   const [btnText, setBtnText] = useState("Join Watch Party");
   const [showChat, setShowChat] = useState(true);
   
-  const [mediaType, setMediaType] = useState('FILE'); 
-  const [mediaUrl, setMediaUrl] = useState(null);
-
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
 
   const videoRef = useRef();
-  const playerRef = useRef();
   const myPeer = useRef();
   const nameInputRef = useRef();
   const retryInterval = useRef(null);
@@ -35,7 +30,7 @@ export default function Viewer() {
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
   const isLocallyPaused = useRef(false); 
-  const isRemoteUpdate = useRef(false);
+  const isRemoteUpdate = useRef(false); 
 
   const handleLogin = (e) => {
       e.preventDefault();
@@ -45,14 +40,13 @@ export default function Viewer() {
 
   useEffect(() => {
     if(!isLoggedIn) return;
-    setIsEnded(false);
 
     // ✅ FIXED PATH FOR RENDER
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
       secure: true,
-      path: '/peerjs' // Changed from '/peerjs/myapp' to fix 404
+      path: '/peerjs' 
     });
     
     myPeer.current.on('open', (id) => {
@@ -60,7 +54,7 @@ export default function Viewer() {
       socket.emit('join-room', roomId, id, username); 
       
       retryInterval.current = setInterval(() => {
-          if(!receivingCall.current && !isEnded && !mediaUrl) {
+          if(!receivingCall.current) {
              console.log("Pinging Host...");
              socket.emit('join-room', roomId, id, username); 
           }
@@ -73,6 +67,7 @@ export default function Viewer() {
       clearInterval(retryInterval.current);
       
       setIsEnded(false); 
+
       call.answer(); 
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
@@ -83,28 +78,10 @@ export default function Viewer() {
       });
     });
 
-    socket.on('media-change', (data) => {
-        setMediaType(data.type);
-        if (data.type === 'URL') {
-            setMediaUrl(data.src);
-            setStatus("Ready to Join");
-            setShowPlayButton(true);
-            setIsEnded(false);
-        } else {
-            setMediaUrl(null);
-            setStatus("Waiting for Stream...");
-            setShowPlayButton(false);
-            receivingCall.current = false;
-        }
-    });
-
     socket.on('kicked', () => {
         setIsKicked(true);
         isWatching.current = false;
-        if(videoRef.current) {
-            videoRef.current.pause();
-            videoRef.current.srcObject = null;
-        }
+        if(videoRef.current) videoRef.current.pause();
         if(myPeer.current) myPeer.current.destroy();
         socket.emit('leave-room');
     });
@@ -118,20 +95,15 @@ export default function Viewer() {
     socket.on('video-sync', (data) => {
         hostState.current = data; 
         
-        if (isWatching.current) {
-            let currentTime = 0;
-            if (mediaType === 'FILE') currentTime = videoRef.current?.currentTime || 0;
-            else currentTime = playerRef.current?.getCurrentTime() || 0;
-
-            if (Math.abs(currentTime - data.time) > 0.5) {
-                if(mediaType === 'FILE') videoRef.current?.setAttribute('currentTime', data.time);
-                else playerRef.current?.seekTo(data.time, 'seconds');
+        if (videoRef.current && isWatching.current) {
+            if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) {
+                videoRef.current.currentTime = data.time;
             }
 
             isRemoteUpdate.current = true;
 
             if(data.type === 'PAUSE') {
-                if(mediaType === 'FILE') videoRef.current?.pause();
+                videoRef.current.pause();
                 setIsPaused(true);
                 setStatus("Host Paused");
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
@@ -140,12 +112,13 @@ export default function Viewer() {
                 setStatus("LIVE");
                 
                 if (!isLocallyPaused.current) {
-                    if(mediaType === 'FILE') videoRef.current?.play().catch(() => {});
+                    videoRef.current.play().catch(() => {});
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
+            
             setTimeout(() => { isRemoteUpdate.current = false; }, 100);
         }
     });
@@ -164,7 +137,6 @@ export default function Viewer() {
       socket.off('video-sync');
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
-      socket.off('media-change');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -183,22 +155,18 @@ export default function Viewer() {
   };
 
   const handleManualPlay = async () => {
+    if (!videoRef.current) return;
     setBtnText("Joining...");
-    if (mediaType === 'FILE') {
-        if (!videoRef.current) return;
+    try {
+        await videoRef.current.play();
+        finalizeJoin();
+    } catch (err) {
         try {
+            videoRef.current.muted = true;
             await videoRef.current.play();
             finalizeJoin();
-        } catch (err) {
-            try {
-                videoRef.current.muted = true;
-                await videoRef.current.play();
-                finalizeJoin();
-                alert("Joined muted.");
-            } catch (err2) { setBtnText("Try Again"); }
-        }
-    } else {
-        finalizeJoin();
+            alert("Joined muted.");
+        } catch (err2) { setBtnText("Try Again"); }
     }
   };
 
@@ -206,17 +174,14 @@ export default function Viewer() {
       setShowPlayButton(false);
       setStatus("Connected");
       isWatching.current = true; 
+      
       isRemoteUpdate.current = true;
 
       const { type, time } = hostState.current;
-      
-      if (Number.isFinite(time)) {
-          if(mediaType === 'FILE') videoRef.current?.setAttribute('currentTime', time);
-          else playerRef.current?.seekTo(time);
-      }
+      if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
       if (type === 'PAUSE') {
-          if(mediaType === 'FILE') videoRef.current?.pause();
+          videoRef.current.pause();
           setIsPaused(true);
           setStatus("Host Paused");
           isLocallyPaused.current = false; 
@@ -267,32 +232,13 @@ export default function Viewer() {
       </div>
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden">
         <div className="flex-1 bg-black flex items-center justify-center relative min-w-0">
-          
-          {mediaType === 'FILE' && (
-              <video 
-                ref={videoRef} 
-                controls 
-                className="w-full h-full object-contain" 
-                onPause={onVideoPause} 
-                onPlay={onVideoPlay} 
-              />
-          )}
-
-          {mediaType === 'URL' && mediaUrl && (
-              <div className="w-full h-full">
-                  <ReactPlayer
-                    ref={playerRef}
-                    url={mediaUrl}
-                    width="100%"
-                    height="100%"
-                    controls={true}
-                    playing={!isPaused}
-                    onPause={onVideoPause}
-                    onPlay={onVideoPlay}
-                  />
-              </div>
-          )}
-
+          <video 
+            ref={videoRef} 
+            controls 
+            className="w-full h-full object-contain" 
+            onPause={onVideoPause} 
+            onPlay={onVideoPlay} 
+          />
           {showPlayButton && !isEnded && (
             <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80">
               <div className="bg-neutral-900 p-8 rounded-xl border border-neutral-700 flex flex-col items-center gap-4 shadow-2xl">
