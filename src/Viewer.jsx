@@ -16,7 +16,7 @@ export default function Viewer() {
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
-  const [messages, setMessages] = useState([]); // ✅ Messages State Lifted Here
+  const [messages, setMessages] = useState([]); // Messages State
   
   const videoRef = useRef();
   const myPeer = useRef();
@@ -68,7 +68,7 @@ export default function Viewer() {
       });
     });
 
-    // ✅ FIX: Listen for messages HERE
+    // Global Message Listener
     const handleMessage = (data) => {
         setMessages((prev) => [...prev, { ...data, isMe: false }]);
     };
@@ -90,7 +90,6 @@ export default function Viewer() {
         hostState.current = data; 
         if (videoRef.current && isWatching.current) {
             if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) videoRef.current.currentTime = data.time;
-            
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
                 setIsPaused(true);
@@ -185,7 +184,7 @@ export default function Viewer() {
          </div>
       </div>
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
-        <div className="flex-1 flex items-center justify-center relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
+        <div className="flex-1 flex flex-col relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
           <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden">
             <video ref={videoRef} controls className="w-full h-full object-contain" onPause={() => socket.emit('viewer-status-update', { roomId, status: 'PAUSE' })} onPlay={() => socket.emit('viewer-status-update', { roomId, status: 'LIVE' })} />
             {showPlayButton && !isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-500"><div className="text-center"><div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center mx-auto mb-6 animate-pulse"><span className="text-4xl">🍿</span></div><h2 className="text-3xl font-bold text-white mb-2">Ready to Watch</h2><button onClick={handleManualPlay} className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:bg-zinc-200 transition transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">Join Stream</button></div></div>}
@@ -193,7 +192,6 @@ export default function Viewer() {
             {isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950"><div className="text-center p-12 border border-zinc-800 rounded-3xl bg-black shadow-2xl"><div className="text-6xl mb-6 grayscale opacity-50">📺</div><h1 className="text-2xl font-bold text-zinc-300 mb-2">Host Offline</h1><p className="text-zinc-600">Waiting for signal...</p></div></div>}
           </div>
         </div>
-        {/* Pass messages & setter to Chat */}
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
     </div>
