@@ -51,7 +51,7 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ FIX: Force register immediately to catch early viewers
+      // ✅ REGISTER IMMEDIATELY
       socket.emit('register-host', { roomId, username });
     });
 
@@ -64,7 +64,6 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
-    // ✅ SYNC: Reply to new viewers
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
@@ -152,6 +151,7 @@ export default function Host() {
   const handleSync = (type) => { 
       if(videoRef.current) {
           socket.emit('video-sync', { roomId, type, time: videoRef.current.currentTime }); 
+          // ✅ FIX: Color Logic Sync
           if(isBroadcasting) {
               setStatus(type === 'PLAY' ? "LIVE" : "PAUSED");
           }
