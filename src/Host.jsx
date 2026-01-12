@@ -4,7 +4,12 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
+// ✅ Fix Connection Stability
+const socket = io('https://watch-party-server-1o5x.onrender.com', { 
+    withCredentials: true, 
+    transports: ['polling', 'websocket'], // Force stable connection
+    autoConnect: true 
+});
 
 export default function Host() {
   const { roomId } = useParams();
@@ -51,11 +56,10 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ FIX: Register immediately so server knows who HOST is
+      // ✅ Register immediately
       socket.emit('register-host', { roomId, username });
     });
 
-    // ✅ FIX: Receive updated viewer list
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
@@ -65,7 +69,6 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
-    // ✅ SYNC: Reply to new viewers with current state
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
@@ -131,7 +134,7 @@ export default function Host() {
         let stream;
         if (video.captureStream) stream = video.captureStream(30);
         else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
-        else throw new Error("Browser not supported.");
+        else throw new Error("Browser not supported. Use Chrome or Firefox.");
         
         streamRef.current = stream; 
         setIsBroadcasting(true); 
@@ -153,10 +156,7 @@ export default function Host() {
   const handleSync = (type) => { 
       if(videoRef.current) {
           socket.emit('video-sync', { roomId, type, time: videoRef.current.currentTime }); 
-          // Update Status Dot
-          if(isBroadcasting) {
-              setStatus(type === 'PLAY' ? "LIVE" : "PAUSED");
-          }
+          if(isBroadcasting) setStatus(type === 'PLAY' ? "LIVE" : "PAUSED");
       }
   };
 
@@ -188,13 +188,10 @@ export default function Host() {
         <div className="flex gap-3 items-center">
             <button onClick={handleShare} className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition font-bold text-sm ${inviteCopied ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-zinc-900 hover:bg-zinc-800 border-white/10 text-zinc-300'}`}><span>{inviteCopied ? '✅' : '🔗'}</span><span>{inviteCopied ? 'Copied!' : 'Share'}</span></button>
             <button onClick={() => setShowUserPanel(!showUserPanel)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-full transition"><span className="text-sm">👥 {users.length}</span></button>
-            
-            {/* ✅ GREEN/YELLOW DOT */}
             <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${getDotColor()}`}></div>
                 <span className="text-xs font-bold uppercase text-zinc-400">{status}</span>
             </div>
-
             {!showChat && <button onClick={() => setShowChat(true)} className="p-2 bg-zinc-900 hover:bg-zinc-800 rounded-full border border-white/10 transition text-zinc-400 hover:text-white">💬</button>}
         </div>
       </div>
@@ -210,7 +207,6 @@ export default function Host() {
                                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div>
                                 <div className="flex flex-col">
                                     <span className="font-bold text-sm text-zinc-200">{u.username}</span>
-                                    {/* ✅ Viewer Status */}
                                     <span className={`text-[10px] font-bold uppercase ${u.status === 'LIVE' ? 'text-green-500' : 'text-yellow-500'}`}>
                                         {u.status === 'LIVE' ? '▶ Watching' : '⏸ Paused'}
                                     </span>
