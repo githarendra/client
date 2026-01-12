@@ -18,9 +18,6 @@ export default function Viewer() {
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
   
-  // ✅ New State for Host Name (Defaults to "Party")
-  const [hostName, setHostName] = useState("Party");
-  
   const videoRef = useRef();
   const myPeer = useRef();
   const nameInputRef = useRef();
@@ -29,7 +26,7 @@ export default function Viewer() {
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
-  // ✅ IMPORTANT: Viewer Override Refs
+  // ✅ RE-ADDED: Critical Override Flags
   const isLocallyPaused = useRef(false); 
   const isRemoteUpdate = useRef(false); 
 
@@ -80,11 +77,6 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // ✅ LISTEN FOR NAME
-    socket.on('host-name-update', (name) => {
-        setHostName(name);
-    });
-
     socket.on('kicked', () => {
         setIsKicked(true);
         if(videoRef.current) videoRef.current.pause();
@@ -105,7 +97,7 @@ export default function Viewer() {
                 videoRef.current.currentTime = data.time;
             }
 
-            // ✅ LOGIC: Prevent Host from forcing Play if Viewer manually paused
+            // ✅ Logic: Mark this as a remote update
             isRemoteUpdate.current = true;
 
             if(data.type === 'PAUSE') {
@@ -114,13 +106,14 @@ export default function Viewer() {
                 setStatus("Host Paused");
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
             } else if(data.type === 'PLAY') {
+                // Only play if USER hasn't manually paused
                 if (!isLocallyPaused.current) {
                     videoRef.current.play().catch(() => {});
                     setIsPaused(false);
                     setStatus("LIVE");
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
-                    // Stay paused locally
+                    // We stay paused, but acknowledge status
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
@@ -144,13 +137,12 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
-      socket.off('host-name-update');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
   }, [isLoggedIn, roomId]);
 
-  // ✅ LOGIC: User clicks Play
+  // ✅ Fix: User clicks Play
   const onVideoPlay = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = false;
@@ -159,7 +151,7 @@ export default function Viewer() {
       socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
   };
 
-  // ✅ LOGIC: User clicks Pause
+  // ✅ Fix: User clicks Pause
   const onVideoPause = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = true;
@@ -212,9 +204,7 @@ export default function Viewer() {
   return (
     <div className="flex flex-col h-screen w-screen bg-black overflow-hidden font-sans">
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
-         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span>
-         {/* ✅ DISPLAY HOST NAME */}
-         <span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div></div>
+         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{roomId}</span></div></div>
          <div className="flex items-center gap-3">
              {!showChat && !isEnded && <button onClick={() => setShowChat(true)} className="text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white px-3 py-1.5 rounded-full border border-white/10 transition flex items-center gap-2"><span>💬</span> Chat</button>}
              <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${isEnded ? 'bg-red-500' : status === 'LIVE' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div><span className="text-xs font-bold uppercase text-zinc-400">{status}</span></div>
