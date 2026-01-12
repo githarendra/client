@@ -48,9 +48,6 @@ export default function Viewer() {
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
       socket.emit('join-room', roomId, id, username); 
-      // ✅ FIX: Ask the host for current video state
-      socket.emit('request-sync', roomId);
-      
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
       }, 2000);
@@ -113,7 +110,6 @@ export default function Viewer() {
                     setStatus("LIVE");
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
-                    // Local Pause override
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
@@ -166,7 +162,9 @@ export default function Viewer() {
     isWatching.current = true; 
     videoRef.current.muted = false;
 
-    // ✅ FORCE SYNC: Jump to correct time immediately
+    // ✅ FIX: Immediately request sync from host
+    socket.emit('request-sync', roomId);
+
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
@@ -186,19 +184,14 @@ export default function Viewer() {
     }
   };
 
-  // ✅ KICKED SCREEN UI FIX
   if (isKicked) {
       return (
           <div className="flex h-screen w-screen bg-black items-center justify-center font-sans">
               <div className="relative z-10 bg-red-950/20 backdrop-blur-xl border border-red-500/20 p-10 rounded-3xl text-center shadow-2xl">
-                  <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                      <span className="text-4xl">🚫</span>
-                  </div>
+                  <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6"><span className="text-4xl">🚫</span></div>
                   <h1 className="text-2xl font-bold text-red-500 mb-2">Access Denied</h1>
                   <p className="text-red-400/60 mb-8 text-sm">You have been removed from this party.</p>
-                  <Link to="/" className="inline-block px-8 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition shadow-lg shadow-red-900/20">
-                      Return Home
-                  </Link>
+                  <Link to="/" className="inline-block px-8 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition shadow-lg shadow-red-900/20">Return Home</Link>
               </div>
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/10 via-black to-black pointer-events-none"></div>
           </div>
