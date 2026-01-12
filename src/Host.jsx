@@ -11,8 +11,10 @@ export default function Host() {
   const [username, setUsername] = useState(""); 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Offline");
+  
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
+  
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [fileSelected, setFileSelected] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
@@ -63,9 +65,23 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
+    // ✅ FIX: Reply to a specific viewer who just joined
+    socket.on('request-sync-from-host', (requesterId) => {
+        if(videoRef.current) {
+            const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
+            socket.emit('video-sync', { 
+                roomId, 
+                type: state, 
+                time: videoRef.current.currentTime,
+                targetSocketId: requesterId // Send only to new user
+            });
+        }
+    });
+
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
+          // Initial sync attempt for peer connection
           if(videoRef.current) {
               const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
               socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
@@ -76,7 +92,8 @@ export default function Host() {
     return () => {
         socket.off('user-connected');
         socket.off('update-user-list');
-        socket.off('receive-message', handleMessage);
+        socket.off('receive-message');
+        socket.off('request-sync-from-host');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
