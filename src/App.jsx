@@ -1,84 +1,50 @@
 import React, { useState } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import Host from './Host';
-import Viewer from './Viewer';
+import { useNavigate } from 'react-router-dom';
+import { v4 as uuidV4 } from 'uuid';
 
-function Home() {
+export default function Home() {
   const navigate = useNavigate();
   const [joinId, setJoinId] = useState("");
 
   const createRoom = () => {
-    // Generate a random 6-character Room ID
-    const roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    navigate(`/host/${roomId}`);
+    navigate(`/host/${uuidV4()}`);
   };
 
   const joinRoom = (e) => {
     e.preventDefault();
-    if (joinId.trim()) {
-      navigate(`/viewer/${joinId.toUpperCase()}`);
-    }
+    if (joinId.trim()) navigate(`/viewer/${joinId}`);
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen w-screen bg-black text-white font-sans overflow-hidden relative">
-      <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-black to-black pointer-events-none"></div>
-
-      <div className="z-10 flex flex-col items-center gap-10">
-        <div className="text-center space-y-2">
-          <h1 className="text-6xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-white drop-shadow-2xl">
-            WATCH<span className="text-white">PARTY</span>
+    <div className="min-h-screen bg-black text-white font-sans selection:bg-violet-500/30 flex items-center justify-center relative overflow-hidden">
+      {/* Ambient Background */}
+      <div className="absolute top-[-20%] left-[-20%] w-[500px] h-[500px] bg-violet-600/20 rounded-full blur-[120px]"></div>
+      
+      <div className="z-10 max-w-4xl w-full px-6 grid md:grid-cols-2 gap-12 items-center">
+        <div className="space-y-6">
+          <h1 className="text-6xl md:text-7xl font-extrabold tracking-tight leading-tight">
+            Watch <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-400">Together.</span>
           </h1>
-          <p className="text-gray-400 text-lg tracking-wide uppercase">Stream movies with friends • Real-time Sync</p>
+          <p className="text-zinc-400 text-lg">Stream your local movies to friends in perfect sync.</p>
         </div>
 
-        <div className="flex flex-col gap-6 w-full max-w-sm">
-          
-          {/* CREATE ROOM */}
-          <button 
-            onClick={createRoom} 
-            className="w-full py-4 bg-blue-600 rounded-xl font-bold text-xl hover:scale-105 transition shadow-lg shadow-blue-900/50 flex items-center justify-center gap-3"
-          >
-            <span>📺</span> Create New Room
+        <div className="bg-zinc-900/50 backdrop-blur-xl border border-white/10 p-8 rounded-3xl shadow-2xl">
+          <button onClick={createRoom} className="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold py-4 rounded-xl hover:scale-[1.02] transition shadow-lg mb-6">
+            ✨ Create New Party
           </button>
-
-          <div className="flex items-center gap-4 text-gray-500 text-sm font-bold">
-            <div className="h-px bg-gray-800 flex-1"></div> OR <div className="h-px bg-gray-800 flex-1"></div>
+          
+          <div className="relative flex py-2 items-center mb-6">
+            <div className="flex-grow border-t border-white/10"></div>
+            <span className="flex-shrink-0 mx-4 text-zinc-500 text-xs font-bold uppercase">Or Join Room</span>
+            <div className="flex-grow border-t border-white/10"></div>
           </div>
 
-          {/* JOIN ROOM */}
           <form onSubmit={joinRoom} className="flex gap-2">
-            <input 
-              type="text" 
-              placeholder="Enter Room ID" 
-              value={joinId}
-              onChange={(e) => setJoinId(e.target.value)}
-              className="flex-1 bg-neutral-900 border border-neutral-700 text-white px-4 py-3 rounded-xl focus:border-blue-500 outline-none transition text-center tracking-widest font-mono uppercase"
-            />
-            <button 
-              type="submit" 
-              className="bg-neutral-800 hover:bg-neutral-700 text-white px-6 rounded-xl font-bold border border-neutral-700 transition"
-            >
-              Join
-            </button>
+            <input type="text" placeholder="Paste Room ID..." value={joinId} onChange={(e) => setJoinId(e.target.value)} className="flex-1 bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 outline-none" />
+            <button type="submit" className="bg-zinc-800 hover:bg-zinc-700 text-white px-6 py-3 rounded-xl font-bold border border-white/5">Join</button>
           </form>
         </div>
       </div>
-    </div>
-  );
-}
-
-export default function App() {
-  return (
-    <div className="w-full h-full">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          {/* Dynamic Routes for Room ID */}
-          <Route path="/host/:roomId" element={<Host />} />
-          <Route path="/viewer/:roomId" element={<Viewer />} />
-        </Routes>
-      </BrowserRouter>
     </div>
   );
 }
