@@ -18,7 +18,7 @@ export default function Viewer() {
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
   
-  // ✅ New State for Host Name
+  // ✅ Host Name State
   const [hostName, setHostName] = useState("Party");
   
   const videoRef = useRef();
@@ -51,9 +51,6 @@ export default function Viewer() {
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
       socket.emit('join-room', roomId, id, username); 
-      // ✅ FIX: Ask for current status immediately
-      socket.emit('request-sync', roomId);
-      
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
       }, 2000);
@@ -82,7 +79,7 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // ✅ Listen for Host Name
+    // ✅ LISTEN FOR NAME
     socket.on('host-name-update', (name) => {
         setHostName(name);
     });
@@ -144,8 +141,8 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
-      socket.off('kicked');
       socket.off('host-name-update');
+      socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
   }, [isLoggedIn, roomId]);
@@ -174,7 +171,6 @@ export default function Viewer() {
     isWatching.current = true; 
     videoRef.current.muted = false;
 
-    // ✅ FORCE UPDATE: Ensure we grab the latest state now
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
