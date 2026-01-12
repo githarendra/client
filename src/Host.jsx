@@ -13,7 +13,7 @@ export default function Host() {
   const [status, setStatus] = useState("Offline");
   
   const [users, setUsers] = useState([]);
-  const [messages, setMessages] = useState([]); // ✅ Messages State Lifted Here
+  const [messages, setMessages] = useState([]); // ✅ Messages persist here
   
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [fileSelected, setFileSelected] = useState(false);
@@ -59,7 +59,7 @@ export default function Host() {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
     
-    // ✅ FIX: Listen for messages HERE (Global Listener)
+    // ✅ Global Message Listener (so chat works even when closed)
     const handleMessage = (data) => {
         setMessages((prev) => [...prev, { ...data, isMe: false }]);
     };
@@ -78,7 +78,7 @@ export default function Host() {
     return () => {
         socket.off('user-connected');
         socket.off('update-user-list');
-        socket.off('receive-message', handleMessage); // Cleanup
+        socket.off('receive-message', handleMessage);
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
@@ -168,38 +168,61 @@ export default function Host() {
         </div>
       </div>
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
-        <div className="flex-1 flex items-center justify-center relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
+        <div className="flex-1 flex flex-col relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
           {showUserPanel && (
             <div className="absolute top-4 right-4 z-50 w-72 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[70%] animate-in fade-in zoom-in-95 duration-200">
                 <div className="p-4 border-b border-white/10 flex justify-between items-center"><h3 className="font-bold text-white text-sm">Viewers ({users.length})</h3><button onClick={() => setShowUserPanel(false)} className="text-zinc-500 hover:text-white transition">✕</button></div>
                 <div className="overflow-y-auto flex-1 p-2 space-y-1">
                     {users.map(u => (
                         <div key={u.socketId} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition group">
-                            <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div>
-                            <div className="flex flex-col"><span className="font-bold text-sm text-zinc-200">{u.username}</span><span className={`text-[10px] font-bold uppercase ${u.status === 'LIVE' ? 'text-green-500' : 'text-yellow-500'}`}>{u.status === 'LIVE' ? '▶ Watching' : '⏸ Paused'}</span></div></div>
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div>
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-sm text-zinc-200">{u.username}</span>
+                                    <span className={`text-[10px] font-bold uppercase ${u.status === 'LIVE' ? 'text-green-500' : 'text-yellow-500'}`}>
+                                        {u.status === 'LIVE' ? '▶ Watching' : '⏸ Paused'}
+                                    </span>
+                                </div>
+                            </div>
                             <button onClick={() => handleKick(u.socketId, u.username)} className="text-xs text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 px-2 py-1 rounded transition">Kick</button>
                         </div>
                     ))}
                 </div>
             </div>
           )}
-          {!fileSelected ? (
-            <div className="text-center"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video file to begin.</p></div>
-          ) : (
-            <video ref={videoRef} controls className="max-h-full max-w-full shadow-2xl rounded-lg" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
-          )}
+          
+          <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden">
+            {!fileSelected ? (
+                <div className="text-center"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video file to begin.</p></div>
+            ) : (
+                <video ref={videoRef} controls className="w-full h-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
+            )}
+          </div>
         </div>
+        
         {/* Pass messages & setter to Chat */}
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
-      <div className="h-20 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
-        <label className={`cursor-pointer group flex items-center gap-3 px-6 py-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:border-zinc-700 transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
-            <span className="text-2xl group-hover:scale-110 transition">📂</span><div className="text-left"><span className="block text-xs text-zinc-500 font-bold uppercase">Source</span><span className="block text-sm font-bold text-white">Select File</span></div><input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
+      
+      {/* ✅ UNIFIED FOOTER: Buttons are now symmetrical */}
+      <div className="h-24 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
+        <label className={`cursor-pointer group flex items-center gap-4 px-6 h-14 w-72 bg-zinc-900 border border-zinc-800 rounded-2xl hover:bg-zinc-800 hover:border-zinc-700 transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
+            <span className="text-2xl group-hover:scale-110 transition">📂</span>
+            <div className="text-left flex-1">
+                <span className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Source</span>
+                <span className="block text-sm font-bold text-white truncate">{fileSelected ? "File Loaded" : "Select File"}</span>
+            </div>
+            <input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
         </label>
+
         {!isBroadcasting ? (
-            <button onClick={startBroadcast} disabled={!fileSelected} className={`px-8 py-3 rounded-2xl font-bold text-sm transition-all shadow-lg flex items-center gap-2 ${fileSelected ? 'bg-violet-600 hover:bg-violet-500 text-white hover:scale-105 shadow-violet-900/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}><span>📡</span> Start Broadcast</button>
+            <button onClick={startBroadcast} disabled={!fileSelected} className={`h-14 w-72 rounded-2xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-2 ${fileSelected ? 'bg-violet-600 hover:bg-violet-500 text-white hover:scale-105 shadow-violet-900/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}>
+                <span>📡</span> Start Broadcast
+            </button>
         ) : (
-            <button onClick={stopBroadcast} className="px-8 py-3 rounded-2xl font-bold text-sm transition-all bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white flex items-center gap-2 animate-pulse"><span>⏹</span> Stop Broadcast</button>
+            <button onClick={stopBroadcast} className="h-14 w-72 rounded-2xl font-bold text-sm transition-all bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white flex items-center justify-center gap-2 animate-pulse">
+                <span>⏹</span> Stop Broadcast
+            </button>
         )}
       </div>
     </div>
