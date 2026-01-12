@@ -167,7 +167,9 @@ export default function Host() {
         </div>
       </div>
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
+        {/* ✅ FIXED: Restored Ambient Effect for Video Container */}
         <div className="flex-1 flex flex-col relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
+          
           {showUserPanel && (
             <div className="absolute top-4 right-4 z-50 w-72 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[70%] animate-in fade-in zoom-in-95 duration-200">
                 <div className="p-4 border-b border-white/10 flex justify-between items-center"><h3 className="font-bold text-white text-sm">Viewers ({users.length})</h3><button onClick={() => setShowUserPanel(false)} className="text-zinc-500 hover:text-white transition">✕</button></div>
@@ -190,9 +192,14 @@ export default function Host() {
             </div>
           )}
           
-          <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden">
+          <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden relative">
             {!fileSelected ? (
-                <div className="text-center"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video file to begin.</p></div>
+                // ✅ ADDED: Gradient Background for Empty State
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800/30 via-black to-black">
+                    <div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div>
+                    <h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2>
+                    <p className="text-zinc-500">Select a video file to begin.</p>
+                </div>
             ) : (
                 <video ref={videoRef} controls className="w-full h-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
             )}
@@ -202,9 +209,7 @@ export default function Host() {
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
       
-      {/* ✅ UNIFIED FOOTER */}
       <div className="h-24 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
-        {/* Select File Button */}
         <label className={`cursor-pointer group flex items-center justify-center gap-3 w-80 h-16 bg-zinc-900 border border-zinc-800 rounded-2xl hover:bg-zinc-800 hover:border-zinc-700 transition shadow-lg ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
             <span className="text-2xl group-hover:scale-110 transition">📂</span>
             <div className="flex flex-col items-start">
@@ -214,7 +219,6 @@ export default function Host() {
             <input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
         </label>
 
-        {/* Broadcast Button */}
         {!isBroadcasting ? (
             <button onClick={startBroadcast} disabled={!fileSelected} className={`w-80 h-16 rounded-2xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-3 ${fileSelected ? 'bg-violet-600 hover:bg-violet-500 text-white hover:scale-105 shadow-violet-900/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}>
                 <span className="text-xl">📡</span> 
