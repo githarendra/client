@@ -70,9 +70,9 @@ export default function Viewer() {
         if(videoRef.current) {
             videoRef.current.srcObject = hostStream;
             
-            // ✅ NEW STRATEGY: Play immediately (muted) to prevent deadlock
+            // ✅ AUTOPLAY FIX: Play muted immediately to satisfy browser policy
             videoRef.current.muted = true;
-            videoRef.current.play().catch(e => console.log("Autoplay waiting for user interaction..."));
+            videoRef.current.play().catch(e => console.log("Autoplay waiting..."));
 
             setStatus("Ready to Join");
             setShowPlayButton(true);
@@ -156,7 +156,6 @@ export default function Viewer() {
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
-  // ✅ SIMPLIFIED JOIN LOGIC (Impossible to freeze)
   const handleManualPlay = () => {
     if (!videoRef.current) return;
 
@@ -185,7 +184,6 @@ export default function Viewer() {
         isLocallyPaused.current = false;
         socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
         
-        // Force play one last time to be sure
         videoRef.current.play().catch(e => console.log("Final play check", e));
     }
 
