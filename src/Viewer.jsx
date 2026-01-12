@@ -4,7 +4,6 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ CONNECT TO RENDER
 const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
 
 export default function Viewer() {
@@ -40,7 +39,6 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ FIXED PATH FOR RENDER
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -70,12 +68,19 @@ export default function Viewer() {
       call.answer(); 
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
-            console.log("📺 Receiving Stream");
+            console.log("📺 Stream received with tracks:", hostStream.getTracks());
             videoRef.current.srcObject = hostStream;
             
-            // ✅ AUDIO/VIDEO FIX: Play Muted immediately
+            // ✅ CRITICAL: Autoplay Muted. 
+            // Browsers BLOCK video if you try to play unmuted automatically.
             videoRef.current.muted = true;
-            videoRef.current.play().catch(e => console.log("Autoplay waiting for click..."));
+            
+            const playPromise = videoRef.current.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.log("Autoplay prevented:", error);
+                });
+            }
 
             setStatus("Ready to Join");
             setShowPlayButton(true);
@@ -159,20 +164,20 @@ export default function Viewer() {
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
-  // ✅ GUARANTEED NO-STUCK LOGIC
+  // ✅ GUARANTEED NO-STUCK JOIN
   const handleManualPlay = () => {
     if (!videoRef.current) return;
 
-    // 1. Update UI Immediately
+    // 1. Hide Button INSTANTLY (Never gets stuck)
     setShowPlayButton(false);
     setStatus("Connected");
     isWatching.current = true; 
     isRemoteUpdate.current = true;
 
-    // 2. UNMUTE (This is what actually "starts" the audio)
+    // 2. Unmute (Because we started muted)
     videoRef.current.muted = false;
 
-    // 3. Apply Host State
+    // 3. Sync
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
@@ -188,8 +193,8 @@ export default function Viewer() {
         isLocallyPaused.current = false;
         socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
         
-        // Ensure it's playing
-        videoRef.current.play().catch(e => console.log("Play catch", e));
+        // Force play
+        videoRef.current.play().catch(e => console.log("Final play check", e));
     }
 
     setTimeout(() => { isRemoteUpdate.current = false; }, 200);
