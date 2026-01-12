@@ -4,6 +4,7 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
+// ✅ CONNECT TO RENDER
 const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
 
 export default function Host() {
@@ -12,7 +13,7 @@ export default function Host() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Offline");
   
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState([]); // ✅ Viewer Count State Restored
   const [showUserPanel, setShowUserPanel] = useState(false);
 
   const [fileSelected, setFileSelected] = useState(false);
@@ -41,6 +42,7 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ FIXED PATH FOR RENDER
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -54,13 +56,17 @@ export default function Host() {
       socket.emit('host-started-stream', roomId);
     });
 
+    // ✅ RESTORED: Listen for viewer updates
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
     
     socket.on('user-connected', (userId) => {
+      // If we are already broadcasting, call the new user immediately
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
+          
+          // Sync their video time
           if(videoRef.current) {
               const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
               socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
@@ -80,9 +86,13 @@ export default function Host() {
       calledPeers.current[userId] = true;
       setTimeout(() => {
           try {
+              console.log("📞 Calling new user:", userId);
               myPeer.current.call(userId, stream);
               setTimeout(() => { calledPeers.current[userId] = false; }, 2000); 
-          } catch(err) { calledPeers.current[userId] = false; }
+          } catch(err) { 
+              console.error("Call failed", err);
+              calledPeers.current[userId] = false; 
+          }
       }, 500); 
   };
 
@@ -104,10 +114,11 @@ export default function Host() {
   const startBroadcast = async () => {
     const video = videoRef.current; if (!video) return;
     try { 
-        // ✅ CRITICAL FIX: Ensure audio is captured
+        // ✅ FIX: Ensure volume is up so audio is captured
+        video.volume = 1.0;
         video.muted = false; 
-        video.volume = 1.0; 
-        
+
+        // ✅ FIX: Cross-browser capture
         let stream;
         if (video.captureStream) {
             stream = video.captureStream(30);
@@ -118,11 +129,18 @@ export default function Host() {
         }
         
         streamRef.current = stream; 
+        
         setIsBroadcasting(true); 
         setStatus("BROADCASTING (PAUSED)"); 
+        
         socket.emit('host-started-stream', roomId); 
+        socket.emit('video-sync', { 
+            roomId, 
+            type: 'PAUSE', 
+            time: video.currentTime 
+        });
 
-    } catch (err) { alert(err.message); }
+    } catch (err) { alert("Stream Error: " + err.message); }
   };
 
   const stopBroadcast = () => {
