@@ -18,7 +18,7 @@ export default function Viewer() {
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
   
-  // ✅ Host Name State
+  // ✅ New State for Host Name (Defaults to "Party")
   const [hostName, setHostName] = useState("Party");
   
   const videoRef = useRef();
@@ -29,6 +29,7 @@ export default function Viewer() {
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
+  // ✅ IMPORTANT: Viewer Override Refs
   const isLocallyPaused = useRef(false); 
   const isRemoteUpdate = useRef(false); 
 
@@ -104,6 +105,7 @@ export default function Viewer() {
                 videoRef.current.currentTime = data.time;
             }
 
+            // ✅ LOGIC: Prevent Host from forcing Play if Viewer manually paused
             isRemoteUpdate.current = true;
 
             if(data.type === 'PAUSE') {
@@ -118,6 +120,7 @@ export default function Viewer() {
                     setStatus("LIVE");
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
+                    // Stay paused locally
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
@@ -147,14 +150,16 @@ export default function Viewer() {
     };
   }, [isLoggedIn, roomId]);
 
+  // ✅ LOGIC: User clicks Play
   const onVideoPlay = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = false;
-      setIsPaused(false);
+      setIsPaused(false); // Make sure overlay vanishes
       setStatus("LIVE");
       socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
   };
 
+  // ✅ LOGIC: User clicks Pause
   const onVideoPause = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = true;
@@ -208,7 +213,7 @@ export default function Viewer() {
     <div className="flex flex-col h-screen w-screen bg-black overflow-hidden font-sans">
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
          <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span>
-         {/* ✅ Display Host Name */}
+         {/* ✅ DISPLAY HOST NAME */}
          <span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div></div>
          <div className="flex items-center gap-3">
              {!showChat && !isEnded && <button onClick={() => setShowChat(true)} className="text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white px-3 py-1.5 rounded-full border border-white/10 transition flex items-center gap-2"><span>💬</span> Chat</button>}
