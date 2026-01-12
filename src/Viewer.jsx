@@ -17,6 +17,7 @@ export default function Viewer() {
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [hostName, setHostName] = useState("Party");
   
   const videoRef = useRef();
   const myPeer = useRef();
@@ -48,6 +49,9 @@ export default function Viewer() {
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
       socket.emit('join-room', roomId, id, username); 
+      // Handshake: Ask for current status immediately
+      socket.emit('request-sync', roomId);
+      
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
       }, 2000);
@@ -63,10 +67,12 @@ export default function Viewer() {
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
             videoRef.current.srcObject = hostStream;
+            // Attempt initial play (muted usually works)
             videoRef.current.muted = true;
-            videoRef.current.play().catch(e => console.log("Waiting for user interaction..."));
+            videoRef.current.play()
+                .then(() => setShowPlayButton(false))
+                .catch(() => setShowPlayButton(true));
             setStatus("Ready to Join");
-            setShowPlayButton(true);
         }
       });
     });
@@ -75,6 +81,8 @@ export default function Viewer() {
         setMessages((prev) => [...prev, { ...data, isMe: false }]);
     };
     socket.on('receive-message', handleMessage);
+
+    socket.on('host-name-update', (name) => setHostName(name));
 
     socket.on('kicked', () => {
         setIsKicked(true);
@@ -92,6 +100,7 @@ export default function Viewer() {
         hostState.current = data; 
         
         if (videoRef.current && isWatching.current) {
+            // Time Sync threshold (0.5s)
             if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) {
                 videoRef.current.currentTime = data.time;
             }
@@ -103,13 +112,28 @@ export default function Viewer() {
                 setIsPaused(true);
                 setStatus("Host Paused");
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
-            } else if(data.type === 'PLAY') {
+            } 
+            else if(data.type === 'PLAY') {
                 if (!isLocallyPaused.current) {
-                    videoRef.current.play().catch(() => {});
-                    setIsPaused(false);
-                    setStatus("LIVE");
-                    socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
+                    // ✅ CRITICAL FIX: Try to play. If browser blocks, show button.
+                    const playPromise = videoRef.current.play();
+                    
+                    if (playPromise !== undefined) {
+                        playPromise
+                        .then(() => {
+                            setIsPaused(false);
+                            setStatus("LIVE");
+                            socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
+                        })
+                        .catch((error) => {
+                            console.log("Auto-play blocked by browser. User must interact.", error);
+                            // Show the Play button so user can click to sync
+                            setShowPlayButton(true);
+                            setIsPaused(true);
+                        });
+                    }
                 } else {
+                    // User manually paused, so we respect that
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
@@ -121,7 +145,7 @@ export default function Viewer() {
     socket.on('broadcast-stopped', () => {
         setIsEnded(true);
         setStatus("Host Disconnected");
-        isWatching.current = false; 
+        isWatching.current = false;
         receivingCall.current = false;
         if(videoRef.current) videoRef.current.srcObject = null;
     });
@@ -133,6 +157,7 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
+      socket.off('host-name-update');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -162,38 +187,35 @@ export default function Viewer() {
     isWatching.current = true; 
     videoRef.current.muted = false;
 
-    // ✅ FIX: Immediately request sync from host
+    // Force Sync immediately
     socket.emit('request-sync', roomId);
 
-    const { type, time } = hostState.current;
-    if (Number.isFinite(time)) videoRef.current.currentTime = time;
-
-    const statusToSend = type === 'PAUSE' ? 'PAUSE' : 'LIVE';
-    setIsPaused(type === 'PAUSE');
-    
-    if (type === 'PAUSE') setStatus("Host Paused");
-    else setStatus("LIVE");
-
-    socket.emit('viewer-status-update', { roomId, status: statusToSend });
-
-    if (type === 'PLAY') {
-        isLocallyPaused.current = false;
-        videoRef.current.play().catch(e => console.log("Play error", e));
-    } else {
-        videoRef.current.pause();
+    // Attempt Play
+    const playPromise = videoRef.current.play();
+    if(playPromise !== undefined) {
+        playPromise.catch(e => console.log("Manual play error", e));
     }
+    
+    isLocallyPaused.current = false;
+    setIsPaused(false);
+    setStatus("LIVE");
+    socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
   };
 
+  // ✅ RED GLASS "KICKED" SCREEN
   if (isKicked) {
       return (
           <div className="flex h-screen w-screen bg-black items-center justify-center font-sans">
-              <div className="relative z-10 bg-red-950/20 backdrop-blur-xl border border-red-500/20 p-10 rounded-3xl text-center shadow-2xl">
-                  <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6"><span className="text-4xl">🚫</span></div>
-                  <h1 className="text-2xl font-bold text-red-500 mb-2">Access Denied</h1>
-                  <p className="text-red-400/60 mb-8 text-sm">You have been removed from this party.</p>
-                  <Link to="/" className="inline-block px-8 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition shadow-lg shadow-red-900/20">Return Home</Link>
+              <div className="relative z-10 bg-red-950/30 backdrop-blur-2xl border border-red-500/20 p-10 rounded-3xl text-center shadow-[0_0_100px_-20px_rgba(239,68,68,0.3)]">
+                  <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-red-500/20">
+                      <span className="text-4xl">🚫</span>
+                  </div>
+                  <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Access Denied</h1>
+                  <p className="text-red-200/60 mb-8 font-medium">You have been removed from this party.</p>
+                  <Link to="/" className="inline-flex items-center gap-2 px-8 py-3.5 bg-white text-red-600 rounded-xl font-bold transition hover:bg-zinc-200 shadow-xl">
+                      <span>←</span> Return Home
+                  </Link>
               </div>
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/10 via-black to-black pointer-events-none"></div>
           </div>
       );
   }
@@ -213,13 +235,23 @@ export default function Viewer() {
       );
   }
 
+  // ✅ Status Colors: Green = Live, Yellow = Any Pause
+  const getStatusColor = () => {
+      if (status === 'LIVE') return 'bg-green-500 animate-pulse';
+      if (status.includes('Paused') || status.includes('Connecting')) return 'bg-yellow-500';
+      return 'bg-red-500';
+  };
+
   return (
     <div className="flex flex-col h-screen w-screen bg-black overflow-hidden font-sans">
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
-         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{roomId}</span></div></div>
+         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div></div>
          <div className="flex items-center gap-3">
              {!showChat && !isEnded && <button onClick={() => setShowChat(true)} className="text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white px-3 py-1.5 rounded-full border border-white/10 transition flex items-center gap-2"><span>💬</span> Chat</button>}
-             <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${isEnded ? 'bg-red-500' : status === 'LIVE' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div><span className="text-xs font-bold uppercase text-zinc-400">{status}</span></div>
+             <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
+                 <div className={`w-2 h-2 rounded-full ${getStatusColor()}`}></div>
+                 <span className="text-xs font-bold uppercase text-zinc-400">{status}</span>
+             </div>
          </div>
       </div>
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
@@ -232,7 +264,20 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {showPlayButton && !isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-500"><div className="text-center"><div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center mx-auto mb-6 animate-pulse"><span className="text-4xl">🍿</span></div><h2 className="text-3xl font-bold text-white mb-2">Ready to Watch</h2><button onClick={handleManualPlay} className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:bg-zinc-200 transition transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">Join Stream</button></div></div>}
+            {showPlayButton && !isEnded && (
+                <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="text-center">
+                        <div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center mx-auto mb-6 animate-pulse">
+                            <span className="text-4xl">🍿</span>
+                        </div>
+                        <h2 className="text-3xl font-bold text-white mb-2">Ready to Watch</h2>
+                        <p className="text-zinc-400 mb-6 text-sm">Host is streaming. Click to sync.</p>
+                        <button onClick={handleManualPlay} className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:bg-zinc-200 transition transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
+                            Join Stream
+                        </button>
+                    </div>
+                </div>
+            )}
             {isPaused && !isEnded && !showPlayButton && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="bg-black/60 p-8 rounded-full backdrop-blur-md border border-white/10"><svg className="w-16 h-16 text-white/90 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></div></div>}
             {isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950"><div className="text-center p-12 border border-zinc-800 rounded-3xl bg-black shadow-2xl"><div className="text-6xl mb-6 grayscale opacity-50">📺</div><h1 className="text-2xl font-bold text-zinc-300 mb-2">Host Offline</h1><p className="text-zinc-600">Waiting for signal...</p></div></div>}
           </div>
