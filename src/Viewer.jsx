@@ -16,15 +16,20 @@ export default function Viewer() {
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
-  const [messages, setMessages] = useState([]); // Messages State
+  const [messages, setMessages] = useState([]);
   
   const videoRef = useRef();
   const myPeer = useRef();
   const nameInputRef = useRef();
   const retryInterval = useRef(null);
   const receivingCall = useRef(false);
+  
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
+  
+  // ✅ RESTORED: The "Don't Force Me" Logic
+  const isLocallyPaused = useRef(false); 
+  const isRemoteUpdate = useRef(false); 
 
   const handleLogin = (e) => {
       e.preventDefault();
@@ -68,7 +73,6 @@ export default function Viewer() {
       });
     });
 
-    // Global Message Listener
     const handleMessage = (data) => {
         setMessages((prev) => [...prev, { ...data, isMe: false }]);
     };
@@ -86,21 +90,37 @@ export default function Viewer() {
         if(myPeer.current) socket.emit('join-room', roomId, myPeer.current.id, username);
     });
 
+    // ✅ LOGIC RESTORED: Handle Sync safely
     socket.on('video-sync', (data) => {
         hostState.current = data; 
+        
         if (videoRef.current && isWatching.current) {
-            if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) videoRef.current.currentTime = data.time;
+            // 1. Sync Time if drifted
+            if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) {
+                videoRef.current.currentTime = data.time;
+            }
+
+            isRemoteUpdate.current = true; // Mark as remote event so we don't trigger local pause logic
+
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
                 setIsPaused(true);
                 setStatus("Host Paused");
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
             } else if(data.type === 'PLAY') {
-                videoRef.current.play().catch(() => {});
-                setIsPaused(false);
-                setStatus("LIVE");
-                socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
+                // Only play if USER hasn't manually paused
+                if (!isLocallyPaused.current) {
+                    videoRef.current.play().catch(() => {});
+                    setIsPaused(false);
+                    setStatus("LIVE");
+                    socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
+                } else {
+                    // Keep paused, tell host
+                    socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
+                }
             }
+            
+            setTimeout(() => { isRemoteUpdate.current = false; }, 100);
         }
     });
 
@@ -124,6 +144,21 @@ export default function Viewer() {
     };
   }, [isLoggedIn, roomId]);
 
+  // ✅ HANDLERS for manual click on video
+  const onVideoPlay = () => {
+      if (isRemoteUpdate.current) return;
+      // User clicked play -> Rejoin the party
+      isLocallyPaused.current = false;
+      socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
+  };
+
+  const onVideoPause = () => {
+      if (isRemoteUpdate.current) return;
+      // User clicked pause -> Stay paused even if host plays
+      isLocallyPaused.current = true;
+      socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
+  };
+
   const handleManualPlay = () => {
     if (!videoRef.current) return;
     
@@ -141,6 +176,7 @@ export default function Viewer() {
     socket.emit('viewer-status-update', { roomId, status: statusToSend });
 
     if (type === 'PLAY') {
+        isLocallyPaused.current = false;
         videoRef.current.play().catch(e => console.log("Play error", e));
     } else {
         videoRef.current.pause();
@@ -186,7 +222,13 @@ export default function Viewer() {
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
         <div className="flex-1 flex flex-col relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
           <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden">
-            <video ref={videoRef} controls className="w-full h-full object-contain" onPause={() => socket.emit('viewer-status-update', { roomId, status: 'PAUSE' })} onPlay={() => socket.emit('viewer-status-update', { roomId, status: 'LIVE' })} />
+            <video 
+                ref={videoRef} 
+                controls 
+                className="w-full h-full object-contain" 
+                onPause={onVideoPause} 
+                onPlay={onVideoPlay} 
+            />
             {showPlayButton && !isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-500"><div className="text-center"><div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center mx-auto mb-6 animate-pulse"><span className="text-4xl">🍿</span></div><h2 className="text-3xl font-bold text-white mb-2">Ready to Watch</h2><button onClick={handleManualPlay} className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:bg-zinc-200 transition transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">Join Stream</button></div></div>}
             {isPaused && !isEnded && !showPlayButton && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="bg-black/60 p-8 rounded-full backdrop-blur-md border border-white/10"><svg className="w-16 h-16 text-white/90 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></div></div>}
             {isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950"><div className="text-center p-12 border border-zinc-800 rounded-3xl bg-black shadow-2xl"><div className="text-6xl mb-6 grayscale opacity-50">📺</div><h1 className="text-2xl font-bold text-zinc-300 mb-2">Host Offline</h1><p className="text-zinc-600">Waiting for signal...</p></div></div>}
