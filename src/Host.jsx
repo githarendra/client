@@ -53,7 +53,7 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ Send Name Here
+      // ✅ SEND NAME on initial connect
       socket.emit('host-started-stream', { roomId, username });
     });
 
@@ -130,7 +130,7 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("BROADCASTING"); 
         
-        // ✅ Send Name Here too
+        // ✅ SEND NAME on Broadcast Start
         socket.emit('host-started-stream', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
