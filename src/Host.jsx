@@ -4,7 +4,6 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ Connect to Render
 const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
 
 export default function Host() {
@@ -14,8 +13,9 @@ export default function Host() {
   const [status, setStatus] = useState("Offline");
   
   const [users, setUsers] = useState([]);
+  const [messages, setMessages] = useState([]); // ✅ Messages moved here
+  
   const [showUserPanel, setShowUserPanel] = useState(false);
-
   const [fileSelected, setFileSelected] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [showChat, setShowChat] = useState(true);
@@ -88,9 +88,7 @@ export default function Host() {
   };
 
   const handleKick = (socketId, userName) => {
-      if(window.confirm(`Kick ${userName}?`)) {
-          socket.emit('kick-user', { roomId, socketId });
-      }
+      if(window.confirm(`Kick ${userName}?`)) socket.emit('kick-user', { roomId, socketId });
   };
 
   const handleFileChange = (e) => {
@@ -105,26 +103,19 @@ export default function Host() {
   const startBroadcast = async () => {
     const video = videoRef.current; if (!video) return;
     try { 
-        // ✅ LOGIC FROM WORKING VERSION: Ensure Unmuted
         video.muted = false;
+        video.volume = 1.0;
         
         let stream;
-        if (video.captureStream) {
-            stream = video.captureStream(30);
-        } else if (video.mozCaptureStream) {
-            stream = video.mozCaptureStream(30);
-        } else {
-            throw new Error("Browser not supported. Use Chrome or Firefox.");
-        }
+        if (video.captureStream) stream = video.captureStream(30);
+        else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
+        else throw new Error("Browser not supported. Use Chrome or Firefox.");
         
         streamRef.current = stream; 
-        
         setIsBroadcasting(true); 
         setStatus("BROADCASTING"); 
         
         socket.emit('host-started-stream', roomId); 
-        
-        // ✅ LOGIC FROM WORKING VERSION: Sync Pause
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
@@ -170,28 +161,43 @@ export default function Host() {
         </div>
       </div>
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
-        <div className="flex-1 flex items-center justify-center relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
+        <div className="flex-1 flex flex-col relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
           {showUserPanel && (
             <div className="absolute top-4 right-4 z-50 w-72 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[70%] animate-in fade-in zoom-in-95 duration-200">
                 <div className="p-4 border-b border-white/10 flex justify-between items-center"><h3 className="font-bold text-white text-sm">Viewers ({users.length})</h3><button onClick={() => setShowUserPanel(false)} className="text-zinc-500 hover:text-white transition">✕</button></div>
                 <div className="overflow-y-auto flex-1 p-2 space-y-1">
                     {users.map(u => (
                         <div key={u.socketId} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition group">
-                            <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div><span className="font-bold text-sm text-zinc-200">{u.username}</span></div>
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div>
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-sm text-zinc-200">{u.username}</span>
+                                    <span className={`text-[10px] font-bold uppercase ${u.status === 'LIVE' ? 'text-green-500' : 'text-yellow-500'}`}>
+                                        {u.status === 'LIVE' ? '▶ Watching' : '⏸ Paused'}
+                                    </span>
+                                </div>
+                            </div>
                             <button onClick={() => handleKick(u.socketId, u.username)} className="text-xs text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 px-2 py-1 rounded transition">Kick</button>
                         </div>
                     ))}
                 </div>
             </div>
           )}
-          {!fileSelected ? (
-            <div className="text-center"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video file to begin.</p></div>
-          ) : (
-            <video ref={videoRef} controls className="max-h-full max-w-full shadow-2xl rounded-lg" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
-          )}
+          
+          {/* ✅ VIDEO CONTAINER FIX: Full width/height, object-contain */}
+          <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden">
+            {!fileSelected ? (
+                <div className="text-center"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video file to begin.</p></div>
+            ) : (
+                <video ref={videoRef} controls className="w-full h-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
+            )}
+          </div>
         </div>
-        {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} />}
+        
+        {/* Chat Sidebar */}
+        {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
+      
       <div className="h-20 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
         <label className={`cursor-pointer group flex items-center gap-3 px-6 py-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:border-zinc-700 transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
             <span className="text-2xl group-hover:scale-110 transition">📂</span><div className="text-left"><span className="block text-xs text-zinc-500 font-bold uppercase">Source</span><span className="block text-sm font-bold text-white">Select File</span></div><input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
