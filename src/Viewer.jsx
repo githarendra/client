@@ -18,6 +18,9 @@ export default function Viewer() {
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
   
+  // ✅ Host Name (Default: Party)
+  const [hostName, setHostName] = useState("Party");
+  
   const videoRef = useRef();
   const myPeer = useRef();
   const nameInputRef = useRef();
@@ -48,6 +51,9 @@ export default function Viewer() {
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
       socket.emit('join-room', roomId, id, username); 
+      // ✅ Ask for Sync Immediately
+      socket.emit('request-sync', roomId);
+      
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
       }, 2000);
@@ -76,6 +82,11 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
+    // ✅ Update Host Name
+    socket.on('host-name-update', (name) => {
+        setHostName(name);
+    });
+
     socket.on('kicked', () => {
         setIsKicked(true);
         if(videoRef.current) videoRef.current.pause();
@@ -96,10 +107,11 @@ export default function Viewer() {
                 videoRef.current.currentTime = data.time;
             }
 
-            isRemoteUpdate.current = true; // Mark as remote event
+            isRemoteUpdate.current = true;
 
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
+                // ✅ Logic: Host paused, so show "Host Paused"
                 setIsPaused(true);
                 setStatus("Host Paused");
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
@@ -110,7 +122,7 @@ export default function Viewer() {
                     setStatus("LIVE");
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
-                    // Stay paused locally, but respect the update
+                    // Local Pause override
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
@@ -134,16 +146,17 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
+      socket.off('host-name-update');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
   }, [isLoggedIn, roomId]);
 
-  // ✅ FIXED: Update Local UI State when user clicks Play manually
+  // ✅ Video Handlers
   const onVideoPlay = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = false;
-      setIsPaused(false); // Remove overlay
+      setIsPaused(false);
       setStatus("LIVE");
       socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
   };
@@ -151,8 +164,8 @@ export default function Viewer() {
   const onVideoPause = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = true;
-      setIsPaused(true); // Show overlay
-      setStatus("PAUSED");
+      setIsPaused(true);
+      setStatus("Paused"); // Local pause text
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
@@ -164,12 +177,17 @@ export default function Viewer() {
     isWatching.current = true; 
     videoRef.current.muted = false;
 
+    // Force Jump to correct time
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
     const statusToSend = type === 'PAUSE' ? 'PAUSE' : 'LIVE';
     setIsPaused(type === 'PAUSE');
-    setStatus(type === 'PAUSE' ? "Host Paused" : "LIVE");
+    
+    // Set Correct Text Immediately
+    if (type === 'PAUSE') setStatus("Host Paused");
+    else setStatus("LIVE");
+
     socket.emit('viewer-status-update', { roomId, status: statusToSend });
 
     if (type === 'PLAY') {
@@ -200,7 +218,9 @@ export default function Viewer() {
   return (
     <div className="flex flex-col h-screen w-screen bg-black overflow-hidden font-sans">
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
-         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{roomId}</span></div></div>
+         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span>
+         {/* ✅ Display Host Name */}
+         <span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div></div>
          <div className="flex items-center gap-3">
              {!showChat && !isEnded && <button onClick={() => setShowChat(true)} className="text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white px-3 py-1.5 rounded-full border border-white/10 transition flex items-center gap-2"><span>💬</span> Chat</button>}
              <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${isEnded ? 'bg-red-500' : status === 'LIVE' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div><span className="text-xs font-bold uppercase text-zinc-400">{status}</span></div>
