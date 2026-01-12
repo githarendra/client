@@ -79,12 +79,12 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
 
       {/* Input Area */}
       <div className="p-4 bg-black/40 border-t border-white/5 backdrop-blur-lg relative">
-        {/* Full Native Emoji Picker */}
+        {/* ✅ FIXED: Full Native Emoji Picker */}
         {showEmoji && (
           <div className="absolute bottom-full mb-4 left-0 z-50 animate-in slide-in-from-bottom-5 duration-200 shadow-2xl rounded-xl overflow-hidden border border-white/10">
             <EmojiPicker 
                 theme={Theme.DARK} 
-                emojiStyle="native" 
+                emojiStyle="native" // 🌈 This forces colorful emojis!
                 onEmojiClick={onEmojiClick}
                 width={300}
                 height={400}
