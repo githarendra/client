@@ -51,7 +51,7 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // Register Immediately
+      // ✅ FIX: Force register immediately to catch early viewers
       socket.emit('register-host', { roomId, username });
     });
 
@@ -64,6 +64,7 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
+    // ✅ SYNC: Reply to new viewers
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
@@ -79,10 +80,6 @@ export default function Host() {
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
-          if(videoRef.current) {
-              const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
-              socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
-          }
       }
     });
 
@@ -133,7 +130,7 @@ export default function Host() {
         let stream;
         if (video.captureStream) stream = video.captureStream(30);
         else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
-        else throw new Error("Browser not supported. Use Chrome or Firefox.");
+        else throw new Error("Browser not supported.");
         
         streamRef.current = stream; 
         setIsBroadcasting(true); 
