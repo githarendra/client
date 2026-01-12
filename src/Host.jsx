@@ -7,7 +7,7 @@ import Chat from './Chat';
 // ✅ Fix Connection Stability
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
-    transports: ['polling', 'websocket'], // Force stable connection
+    transports: ['polling', 'websocket'], // Important for Render
     autoConnect: true 
 });
 
@@ -56,7 +56,7 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ Register immediately
+      // ✅ Register Immediately
       socket.emit('register-host', { roomId, username });
     });
 
@@ -156,7 +156,9 @@ export default function Host() {
   const handleSync = (type) => { 
       if(videoRef.current) {
           socket.emit('video-sync', { roomId, type, time: videoRef.current.currentTime }); 
-          if(isBroadcasting) setStatus(type === 'PLAY' ? "LIVE" : "PAUSED");
+          if(isBroadcasting) {
+              setStatus(type === 'PLAY' ? "LIVE" : "PAUSED");
+          }
       }
   };
 
