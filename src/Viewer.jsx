@@ -26,7 +26,6 @@ export default function Viewer() {
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
-  // ✅ RE-ADDED: Critical Override Flags
   const isLocallyPaused = useRef(false); 
   const isRemoteUpdate = useRef(false); 
 
@@ -97,8 +96,7 @@ export default function Viewer() {
                 videoRef.current.currentTime = data.time;
             }
 
-            // ✅ Logic: Mark this as a remote update
-            isRemoteUpdate.current = true;
+            isRemoteUpdate.current = true; // Mark as remote event
 
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
@@ -106,14 +104,13 @@ export default function Viewer() {
                 setStatus("Host Paused");
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
             } else if(data.type === 'PLAY') {
-                // Only play if USER hasn't manually paused
                 if (!isLocallyPaused.current) {
                     videoRef.current.play().catch(() => {});
                     setIsPaused(false);
                     setStatus("LIVE");
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
-                    // We stay paused, but acknowledge status
+                    // Stay paused locally, but respect the update
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
@@ -142,20 +139,19 @@ export default function Viewer() {
     };
   }, [isLoggedIn, roomId]);
 
-  // ✅ Fix: User clicks Play
+  // ✅ FIXED: Update Local UI State when user clicks Play manually
   const onVideoPlay = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = false;
-      setIsPaused(false); // Make sure overlay vanishes
+      setIsPaused(false); // Remove overlay
       setStatus("LIVE");
       socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
   };
 
-  // ✅ Fix: User clicks Pause
   const onVideoPause = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = true;
-      setIsPaused(true);
+      setIsPaused(true); // Show overlay
       setStatus("PAUSED");
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
