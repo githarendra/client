@@ -11,10 +11,8 @@ export default function Host() {
   const [username, setUsername] = useState(""); 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Offline");
-  
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
-  
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [fileSelected, setFileSelected] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
@@ -65,7 +63,7 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
-    // ✅ FIX: Reply to a specific viewer who just joined
+    // ✅ FIX: Reply to the specific viewer who just joined
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
@@ -81,7 +79,6 @@ export default function Host() {
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
-          // Initial sync attempt for peer connection
           if(videoRef.current) {
               const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
               socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
@@ -184,7 +181,11 @@ export default function Host() {
         <div className="flex gap-3 items-center">
             <button onClick={handleShare} className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition font-bold text-sm ${inviteCopied ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-zinc-900 hover:bg-zinc-800 border-white/10 text-zinc-300'}`}><span>{inviteCopied ? '✅' : '🔗'}</span><span>{inviteCopied ? 'Copied!' : 'Share'}</span></button>
             <button onClick={() => setShowUserPanel(!showUserPanel)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-full transition"><span className="text-sm">👥 {users.length}</span></button>
-            <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${isBroadcasting ? 'bg-red-500 animate-pulse' : 'bg-zinc-600'}`}></div><span className="text-xs font-bold uppercase text-zinc-400">{status}</span></div>
+            <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
+                {/* ✅ GREEN DOT CHANGE */}
+                <div className={`w-2 h-2 rounded-full ${isBroadcasting ? 'bg-green-500 animate-pulse' : 'bg-zinc-600'}`}></div>
+                <span className="text-xs font-bold uppercase text-zinc-400">{status}</span>
+            </div>
             {!showChat && <button onClick={() => setShowChat(true)} className="p-2 bg-zinc-900 hover:bg-zinc-800 rounded-full border border-white/10 transition text-zinc-400 hover:text-white">💬</button>}
         </div>
       </div>
