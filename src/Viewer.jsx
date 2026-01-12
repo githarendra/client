@@ -22,6 +22,7 @@ export default function Viewer() {
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
   const [hostName, setHostName] = useState("Party");
+  // ✅ Muted State Tracker
   const [isMuted, setIsMuted] = useState(true);
   
   const videoRef = useRef();
@@ -236,7 +237,7 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {/* ✅ UNMUTE BUTTON (Only shows if needed) */}
+            {/* ✅ AUDIO UNMUTE BUTTON (Only shows if needed) */}
             {isMuted && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
