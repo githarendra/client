@@ -13,7 +13,7 @@ export default function Host() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Offline");
   
-  const [users, setUsers] = useState([]); // ✅ Viewer Count State Restored
+  const [users, setUsers] = useState([]);
   const [showUserPanel, setShowUserPanel] = useState(false);
 
   const [fileSelected, setFileSelected] = useState(false);
@@ -42,7 +42,6 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ FIXED PATH FOR RENDER
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -56,17 +55,14 @@ export default function Host() {
       socket.emit('host-started-stream', roomId);
     });
 
-    // ✅ RESTORED: Listen for viewer updates
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
     
     socket.on('user-connected', (userId) => {
-      // If we are already broadcasting, call the new user immediately
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
-          
-          // Sync their video time
+          // Sync immediately
           if(videoRef.current) {
               const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
               socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
@@ -86,13 +82,10 @@ export default function Host() {
       calledPeers.current[userId] = true;
       setTimeout(() => {
           try {
-              console.log("📞 Calling new user:", userId);
+              console.log(`📞 Calling User ${userId} with stream`);
               myPeer.current.call(userId, stream);
               setTimeout(() => { calledPeers.current[userId] = false; }, 2000); 
-          } catch(err) { 
-              console.error("Call failed", err);
-              calledPeers.current[userId] = false; 
-          }
+          } catch(err) { calledPeers.current[userId] = false; }
       }, 500); 
   };
 
@@ -114,11 +107,11 @@ export default function Host() {
   const startBroadcast = async () => {
     const video = videoRef.current; if (!video) return;
     try { 
-        // ✅ FIX: Ensure volume is up so audio is captured
-        video.volume = 1.0;
+        // 1. Ensure Audio is Active for Capture
         video.muted = false; 
-
-        // ✅ FIX: Cross-browser capture
+        video.volume = 1.0; 
+        
+        // 2. Capture Stream
         let stream;
         if (video.captureStream) {
             stream = video.captureStream(30);
@@ -128,19 +121,21 @@ export default function Host() {
             throw new Error("Browser not supported. Use Chrome or Firefox.");
         }
         
-        streamRef.current = stream; 
-        
-        setIsBroadcasting(true); 
-        setStatus("BROADCASTING (PAUSED)"); 
-        
-        socket.emit('host-started-stream', roomId); 
-        socket.emit('video-sync', { 
-            roomId, 
-            type: 'PAUSE', 
-            time: video.currentTime 
-        });
+        console.log("🎥 Stream Captured:", stream.getTracks());
 
-    } catch (err) { alert("Stream Error: " + err.message); }
+        streamRef.current = stream; 
+        setIsBroadcasting(true); 
+        setStatus("BROADCASTING"); 
+        
+        // 3. Notify Server
+        socket.emit('host-started-stream', roomId); 
+        
+        // 4. Force a Play/Pause sync to wake up viewers
+        socket.emit('video-sync', { roomId, type: 'PLAY', time: video.currentTime });
+        
+        // Note: We do NOT force pause here. We let the video run so tracks generate data.
+
+    } catch (err) { alert(err.message); }
   };
 
   const stopBroadcast = () => {
