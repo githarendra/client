@@ -105,6 +105,7 @@ export default function Host() {
   const startBroadcast = async () => {
     const video = videoRef.current; if (!video) return;
     try { 
+        // ✅ LOGIC FROM WORKING VERSION: Ensure Unmuted
         video.muted = false;
         
         let stream;
@@ -122,6 +123,8 @@ export default function Host() {
         setStatus("BROADCASTING"); 
         
         socket.emit('host-started-stream', roomId); 
+        
+        // ✅ LOGIC FROM WORKING VERSION: Sync Pause
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
@@ -144,127 +147,59 @@ export default function Host() {
   if (!isLoggedIn) {
       return (
           <div className="flex h-screen w-screen bg-black items-center justify-center font-sans relative">
-              {/* Login Background Effect */}
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-violet-900/20 via-black to-black"></div>
-              
               <div className="absolute top-6 left-6 z-10"><Link to="/" className="text-zinc-400 hover:text-white flex items-center gap-2 transition group"><span className="text-xl group-hover:-translate-x-1 transition">←</span> <span className="font-bold">Home</span></Link></div>
-              
               <form onSubmit={handleLogin} className="z-10 bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl border border-white/10 flex flex-col gap-6 w-96 shadow-2xl relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500"></div>
-                  <div className="text-center">
-                      <div className="w-16 h-16 bg-violet-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">👑</div>
-                      <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Host Party</h1>
-                      <div className="bg-black/50 p-2 rounded-lg border border-white/5 inline-flex items-center gap-2 text-zinc-400 text-sm font-mono">
-                          <span>{roomId}</span>
-                          <span className="text-xs bg-zinc-800 px-1 py-0.5 rounded text-zinc-500">ID</span>
-                      </div>
-                  </div>
-                  <div className="flex flex-col gap-2 text-left">
-                      <label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Alias</label>
-                      <input ref={nameInputRef} type="text" placeholder="e.g. Director Dan" className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none transition placeholder-zinc-600" autoFocus />
-                  </div>
-                  <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-violet-900/20">Start Hosting</button>
+                  <div className="text-center"><h1 className="text-3xl font-bold text-white tracking-tight mb-2">Host Party</h1></div>
+                  <div className="flex flex-col gap-2 text-left"><label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Alias</label><input ref={nameInputRef} type="text" placeholder="e.g. Host Harry" className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 outline-none transition" autoFocus /></div>
+                  <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 rounded-xl transition-all hover:scale-[1.02] shadow-lg shadow-violet-900/20">Start Hosting</button>
               </form>
           </div>
       );
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-black text-white overflow-hidden font-sans selection:bg-violet-500/30">
-      {/* Header */}
+    <div className="flex flex-col h-screen w-screen bg-black text-white overflow-hidden font-sans">
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
-        <div className="flex items-center gap-6">
-            <Link to="/" className="flex items-center gap-3 group">
-                <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center font-bold text-white group-hover:scale-110 transition">P</div>
-                <h1 className="text-lg font-bold tracking-tight text-zinc-200 group-hover:text-white transition">Party<span className="text-violet-500">Time</span></h1>
-            </Link>
-            <div className="h-6 w-px bg-white/10 hidden md:block"></div>
-            <div className="flex flex-col">
-                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Room ID</span>
-                <span className="text-sm font-mono text-zinc-300 leading-none">{roomId}</span>
-            </div>
-        </div>
+        <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-3 group"><div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center font-bold text-white group-hover:scale-110 transition">P</div><h1 className="text-lg font-bold tracking-tight text-zinc-200 group-hover:text-white transition">Party<span className="text-violet-500">Time</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Room ID</span><span className="text-sm font-mono text-zinc-300 leading-none">{roomId}</span></div></div>
         <div className="flex gap-3 items-center">
-            <button onClick={() => setShowUserPanel(!showUserPanel)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-full transition group">
-                <span className="group-hover:text-violet-400 transition">👥</span>
-                <span className="font-bold text-sm text-zinc-300">{users.length}</span>
-            </button>
-            <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${isBroadcasting ? 'bg-red-500 animate-pulse' : 'bg-zinc-600'}`}></div>
-                <span className="text-xs font-bold uppercase text-zinc-400">{status}</span>
-            </div>
-            {!showChat && (
-                <button onClick={() => setShowChat(true)} className="p-2 bg-zinc-900 hover:bg-zinc-800 rounded-full border border-white/10 transition text-zinc-400 hover:text-white">
-                   💬
-                </button>
-            )}
+            <button onClick={() => setShowUserPanel(!showUserPanel)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-full transition"><span className="text-sm">👥 {users.length}</span></button>
+            <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${isBroadcasting ? 'bg-red-500 animate-pulse' : 'bg-zinc-600'}`}></div><span className="text-xs font-bold uppercase text-zinc-400">{status}</span></div>
+            {!showChat && <button onClick={() => setShowChat(true)} className="p-2 bg-zinc-900 hover:bg-zinc-800 rounded-full border border-white/10 transition text-zinc-400 hover:text-white">💬</button>}
         </div>
       </div>
-
-      {/* Main Content */}
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
         <div className="flex-1 flex items-center justify-center relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
-          
-          {/* User Panel */}
           {showUserPanel && (
             <div className="absolute top-4 right-4 z-50 w-72 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[70%] animate-in fade-in zoom-in-95 duration-200">
-                <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                    <h3 className="font-bold text-white text-sm">Viewers ({users.length})</h3>
-                    <button onClick={() => setShowUserPanel(false)} className="text-zinc-500 hover:text-white transition">✕</button>
-                </div>
+                <div className="p-4 border-b border-white/10 flex justify-between items-center"><h3 className="font-bold text-white text-sm">Viewers ({users.length})</h3><button onClick={() => setShowUserPanel(false)} className="text-zinc-500 hover:text-white transition">✕</button></div>
                 <div className="overflow-y-auto flex-1 p-2 space-y-1">
-                    {users.length === 0 && <p className="text-zinc-600 text-xs text-center p-6 italic">Waiting for friends...</p>}
                     {users.map(u => (
                         <div key={u.socketId} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition group">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div>
-                                <div className="flex flex-col">
-                                    <span className="font-bold text-sm text-zinc-200">{u.username}</span>
-                                    <span className="text-[10px] text-zinc-500 uppercase">{u.status === 'PAUSE' ? '⏸ Paused' : '▶ Watching'}</span>
-                                </div>
-                            </div>
+                            <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div><span className="font-bold text-sm text-zinc-200">{u.username}</span></div>
                             <button onClick={() => handleKick(u.socketId, u.username)} className="text-xs text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 px-2 py-1 rounded transition">Kick</button>
                         </div>
                     ))}
                 </div>
             </div>
           )}
-
           {!fileSelected ? (
-            <div className="text-center">
-                <div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/5">
-                    <span className="text-6xl">🎬</span>
-                </div>
-                <h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2>
-                <p className="text-zinc-500">Select a video file to begin the party.</p>
-            </div>
+            <div className="text-center"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video file to begin.</p></div>
           ) : (
             <video ref={videoRef} controls className="max-h-full max-w-full shadow-2xl rounded-lg" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
           )}
         </div>
-        
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} />}
       </div>
-
-      {/* Control Footer */}
       <div className="h-20 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
         <label className={`cursor-pointer group flex items-center gap-3 px-6 py-3 rounded-2xl border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 hover:border-zinc-700 transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
-            <span className="text-2xl group-hover:scale-110 transition">📂</span>
-            <div className="text-left">
-                <span className="block text-xs text-zinc-500 font-bold uppercase">Source</span>
-                <span className="block text-sm font-bold text-white">Select File</span>
-            </div>
-            <input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
+            <span className="text-2xl group-hover:scale-110 transition">📂</span><div className="text-left"><span className="block text-xs text-zinc-500 font-bold uppercase">Source</span><span className="block text-sm font-bold text-white">Select File</span></div><input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
         </label>
-
         {!isBroadcasting ? (
-            <button onClick={startBroadcast} disabled={!fileSelected} className={`px-8 py-3 rounded-2xl font-bold text-sm transition-all shadow-lg flex items-center gap-2 ${fileSelected ? 'bg-violet-600 hover:bg-violet-500 text-white hover:scale-105 shadow-violet-900/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}>
-                <span>📡</span> Start Broadcast
-            </button>
+            <button onClick={startBroadcast} disabled={!fileSelected} className={`px-8 py-3 rounded-2xl font-bold text-sm transition-all shadow-lg flex items-center gap-2 ${fileSelected ? 'bg-violet-600 hover:bg-violet-500 text-white hover:scale-105 shadow-violet-900/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}><span>📡</span> Start Broadcast</button>
         ) : (
-            <button onClick={stopBroadcast} className="px-8 py-3 rounded-2xl font-bold text-sm transition-all bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white flex items-center gap-2 animate-pulse">
-                <span>⏹</span> Stop Broadcast
-            </button>
+            <button onClick={stopBroadcast} className="px-8 py-3 rounded-2xl font-bold text-sm transition-all bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white flex items-center gap-2 animate-pulse"><span>⏹</span> Stop Broadcast</button>
         )}
       </div>
     </div>
