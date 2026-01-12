@@ -8,7 +8,6 @@ const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredenti
 
 export default function Viewer() {
   const { roomId } = useParams();
-  
   const [username, setUsername] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Connecting...");
@@ -17,14 +16,13 @@ export default function Viewer() {
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
-  const [messages, setMessages] = useState([]); // ✅ Messages Here
+  const [messages, setMessages] = useState([]); // ✅ Messages State Lifted Here
   
   const videoRef = useRef();
   const myPeer = useRef();
   const nameInputRef = useRef();
   const retryInterval = useRef(null);
   const receivingCall = useRef(false);
-  
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
 
@@ -70,6 +68,12 @@ export default function Viewer() {
       });
     });
 
+    // ✅ FIX: Listen for messages HERE
+    const handleMessage = (data) => {
+        setMessages((prev) => [...prev, { ...data, isMe: false }]);
+    };
+    socket.on('receive-message', handleMessage);
+
     socket.on('kicked', () => {
         setIsKicked(true);
         if(videoRef.current) videoRef.current.pause();
@@ -85,9 +89,8 @@ export default function Viewer() {
     socket.on('video-sync', (data) => {
         hostState.current = data; 
         if (videoRef.current && isWatching.current) {
-            if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) {
-                videoRef.current.currentTime = data.time;
-            }
+            if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) videoRef.current.currentTime = data.time;
+            
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
                 setIsPaused(true);
@@ -116,6 +119,7 @@ export default function Viewer() {
       socket.off('video-sync');
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
+      socket.off('receive-message', handleMessage);
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -132,11 +136,10 @@ export default function Viewer() {
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
-    // ✅ FIX: Force Update Status Immediately
     const statusToSend = type === 'PAUSE' ? 'PAUSE' : 'LIVE';
     setIsPaused(type === 'PAUSE');
     setStatus(type === 'PAUSE' ? "Host Paused" : "LIVE");
-    socket.emit('viewer-status-update', { roomId, status: statusToSend }); // Tell host my status now!
+    socket.emit('viewer-status-update', { roomId, status: statusToSend });
 
     if (type === 'PLAY') {
         videoRef.current.play().catch(e => console.log("Play error", e));
@@ -164,11 +167,7 @@ export default function Viewer() {
               <div className="absolute top-6 left-6 z-10"><Link to="/" className="text-zinc-400 hover:text-white flex items-center gap-2 transition group"><span className="text-xl group-hover:-translate-x-1 transition">←</span> <span className="font-bold">Home</span></Link></div>
               <form onSubmit={handleLogin} className="z-10 bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl border border-white/10 flex flex-col gap-6 w-96 shadow-2xl relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500"></div>
-                  <div className="text-center">
-                      <div className="w-16 h-16 bg-violet-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎫</div>
-                      <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Join Party</h1>
-                      <div className="bg-black/50 p-2 rounded-lg border border-white/5 inline-flex items-center gap-2 text-zinc-400 text-sm font-mono mt-2"><span>{roomId}</span></div>
-                  </div>
+                  <div className="text-center"><div className="w-16 h-16 bg-violet-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎫</div><h1 className="text-3xl font-bold text-white tracking-tight mb-2">Join Party</h1><div className="bg-black/50 p-2 rounded-lg border border-white/5 inline-flex items-center gap-2 text-zinc-400 text-xs font-mono mt-2"><span>{roomId}</span></div></div>
                   <div className="flex flex-col gap-2 text-left"><label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Name</label><input ref={nameInputRef} type="text" placeholder="e.g. Viewer Vinny" className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 outline-none transition" autoFocus /></div>
                   <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 rounded-xl transition-all hover:scale-[1.02] shadow-lg shadow-violet-900/20">Enter Cinema</button>
               </form>
@@ -186,28 +185,15 @@ export default function Viewer() {
          </div>
       </div>
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
-        <div className="flex-1 flex flex-col relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
+        <div className="flex-1 flex items-center justify-center relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
           <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden">
-            <video 
-              ref={videoRef} 
-              controls 
-              className="w-full h-full object-contain" 
-              onPause={() => socket.emit('viewer-status-update', { roomId, status: 'PAUSE' })} 
-              onPlay={() => socket.emit('viewer-status-update', { roomId, status: 'LIVE' })}
-            />
-            {showPlayButton && !isEnded && (
-              <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-500">
-                <div className="text-center">
-                  <div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center mx-auto mb-6 animate-pulse"><span className="text-4xl">🍿</span></div>
-                  <h2 className="text-3xl font-bold text-white mb-2">Ready to Watch</h2>
-                  <button onClick={handleManualPlay} className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:bg-zinc-200 transition transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">Join Stream</button>
-                </div>
-              </div>
-            )}
+            <video ref={videoRef} controls className="w-full h-full object-contain" onPause={() => socket.emit('viewer-status-update', { roomId, status: 'PAUSE' })} onPlay={() => socket.emit('viewer-status-update', { roomId, status: 'LIVE' })} />
+            {showPlayButton && !isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-500"><div className="text-center"><div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center mx-auto mb-6 animate-pulse"><span className="text-4xl">🍿</span></div><h2 className="text-3xl font-bold text-white mb-2">Ready to Watch</h2><button onClick={handleManualPlay} className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:bg-zinc-200 transition transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">Join Stream</button></div></div>}
             {isPaused && !isEnded && !showPlayButton && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="bg-black/60 p-8 rounded-full backdrop-blur-md border border-white/10"><svg className="w-16 h-16 text-white/90 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></div></div>}
             {isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950"><div className="text-center p-12 border border-zinc-800 rounded-3xl bg-black shadow-2xl"><div className="text-6xl mb-6 grayscale opacity-50">📺</div><h1 className="text-2xl font-bold text-zinc-300 mb-2">Host Offline</h1><p className="text-zinc-600">Waiting for signal...</p></div></div>}
           </div>
         </div>
+        {/* Pass messages & setter to Chat */}
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
     </div>
