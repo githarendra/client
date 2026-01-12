@@ -13,7 +13,7 @@ export default function Host() {
   const [status, setStatus] = useState("Offline");
   
   const [users, setUsers] = useState([]);
-  const [messages, setMessages] = useState([]); // ✅ Messages persist here
+  const [messages, setMessages] = useState([]);
   
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [fileSelected, setFileSelected] = useState(false);
@@ -59,7 +59,6 @@ export default function Host() {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
     
-    // ✅ Global Message Listener (so chat works even when closed)
     const handleMessage = (data) => {
         setMessages((prev) => [...prev, { ...data, isMe: false }]);
     };
@@ -200,28 +199,37 @@ export default function Host() {
           </div>
         </div>
         
-        {/* Pass messages & setter to Chat */}
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
       
-      {/* ✅ UNIFIED FOOTER: Buttons are now symmetrical */}
+      {/* ✅ UNIFIED FOOTER */}
       <div className="h-24 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
-        <label className={`cursor-pointer group flex items-center gap-4 px-6 h-14 w-72 bg-zinc-900 border border-zinc-800 rounded-2xl hover:bg-zinc-800 hover:border-zinc-700 transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
+        {/* Select File Button */}
+        <label className={`cursor-pointer group flex items-center justify-center gap-3 w-80 h-16 bg-zinc-900 border border-zinc-800 rounded-2xl hover:bg-zinc-800 hover:border-zinc-700 transition shadow-lg ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
             <span className="text-2xl group-hover:scale-110 transition">📂</span>
-            <div className="text-left flex-1">
-                <span className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Source</span>
-                <span className="block text-sm font-bold text-white truncate">{fileSelected ? "File Loaded" : "Select File"}</span>
+            <div className="flex flex-col items-start">
+                <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Source Media</span>
+                <span className="text-sm font-bold text-white truncate max-w-[150px]">{fileSelected ? "Video Loaded" : "Select File"}</span>
             </div>
             <input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
         </label>
 
+        {/* Broadcast Button */}
         {!isBroadcasting ? (
-            <button onClick={startBroadcast} disabled={!fileSelected} className={`h-14 w-72 rounded-2xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-2 ${fileSelected ? 'bg-violet-600 hover:bg-violet-500 text-white hover:scale-105 shadow-violet-900/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}>
-                <span>📡</span> Start Broadcast
+            <button onClick={startBroadcast} disabled={!fileSelected} className={`w-80 h-16 rounded-2xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-3 ${fileSelected ? 'bg-violet-600 hover:bg-violet-500 text-white hover:scale-105 shadow-violet-900/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}>
+                <span className="text-xl">📡</span> 
+                <div className="flex flex-col items-start">
+                    <span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">Action</span>
+                    <span>Start Broadcast</span>
+                </div>
             </button>
         ) : (
-            <button onClick={stopBroadcast} className="h-14 w-72 rounded-2xl font-bold text-sm transition-all bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white flex items-center justify-center gap-2 animate-pulse">
-                <span>⏹</span> Stop Broadcast
+            <button onClick={stopBroadcast} className="w-80 h-16 rounded-2xl font-bold text-sm transition-all bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white flex items-center justify-center gap-3 animate-pulse">
+                <span className="text-xl">⏹</span>
+                <div className="flex flex-col items-start">
+                    <span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">Live</span>
+                    <span>Stop Broadcast</span>
+                </div>
             </button>
         )}
       </div>
