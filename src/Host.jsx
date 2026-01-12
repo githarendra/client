@@ -51,7 +51,7 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ FIX: Register Host immediately so Server knows Name & ID
+      // Register Immediately
       socket.emit('register-host', { roomId, username });
     });
 
@@ -79,6 +79,10 @@ export default function Host() {
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
+          if(videoRef.current) {
+              const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
+              socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
+          }
       }
     });
 
