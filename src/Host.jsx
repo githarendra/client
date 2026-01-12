@@ -51,7 +51,8 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      socket.emit('host-started-stream', { roomId, username });
+      // ✅ FIX: Register Host immediately so Server knows Name & ID
+      socket.emit('register-host', { roomId, username });
     });
 
     socket.on('update-user-list', (updatedUsers) => {
@@ -78,10 +79,6 @@ export default function Host() {
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
-          if(videoRef.current) {
-              const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
-              socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
-          }
       }
     });
 
@@ -132,11 +129,11 @@ export default function Host() {
         let stream;
         if (video.captureStream) stream = video.captureStream(30);
         else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
-        else throw new Error("Browser not supported.");
+        else throw new Error("Browser not supported. Use Chrome or Firefox.");
         
         streamRef.current = stream; 
         setIsBroadcasting(true); 
-        setStatus("LIVE"); // ✅ Default to Green
+        setStatus("LIVE"); 
         
         socket.emit('host-started-stream', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
@@ -154,14 +151,12 @@ export default function Host() {
   const handleSync = (type) => { 
       if(videoRef.current) {
           socket.emit('video-sync', { roomId, type, time: videoRef.current.currentTime }); 
-          // ✅ FIX: Explicitly toggle status text for Green/Yellow dot
           if(isBroadcasting) {
               setStatus(type === 'PLAY' ? "LIVE" : "PAUSED");
           }
       }
   };
 
-  // ✅ FIX: Color Logic
   const getDotColor = () => {
       if (status === 'LIVE') return 'bg-green-500 animate-pulse';
       if (status === 'PAUSED') return 'bg-yellow-500';
@@ -190,13 +185,10 @@ export default function Host() {
         <div className="flex gap-3 items-center">
             <button onClick={handleShare} className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition font-bold text-sm ${inviteCopied ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-zinc-900 hover:bg-zinc-800 border-white/10 text-zinc-300'}`}><span>{inviteCopied ? '✅' : '🔗'}</span><span>{inviteCopied ? 'Copied!' : 'Share'}</span></button>
             <button onClick={() => setShowUserPanel(!showUserPanel)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-full transition"><span className="text-sm">👥 {users.length}</span></button>
-            
-            {/* ✅ STATUS INDICATOR */}
             <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${getDotColor()}`}></div>
                 <span className="text-xs font-bold uppercase text-zinc-400">{status}</span>
             </div>
-
             {!showChat && <button onClick={() => setShowChat(true)} className="p-2 bg-zinc-900 hover:bg-zinc-800 rounded-full border border-white/10 transition text-zinc-400 hover:text-white">💬</button>}
         </div>
       </div>
@@ -212,7 +204,6 @@ export default function Host() {
                                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div>
                                 <div className="flex flex-col">
                                     <span className="font-bold text-sm text-zinc-200">{u.username}</span>
-                                    {/* ✅ VIEWER STATUS: Updated to show PAUSE correctly */}
                                     <span className={`text-[10px] font-bold uppercase ${u.status === 'LIVE' ? 'text-green-500' : 'text-yellow-500'}`}>
                                         {u.status === 'LIVE' ? '▶ Watching' : '⏸ Paused'}
                                     </span>
