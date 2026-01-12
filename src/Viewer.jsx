@@ -48,6 +48,9 @@ export default function Viewer() {
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
       socket.emit('join-room', roomId, id, username); 
+      // ✅ FIX: Ask the host for current video state
+      socket.emit('request-sync', roomId);
+      
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
       }, 2000);
@@ -110,9 +113,11 @@ export default function Viewer() {
                     setStatus("LIVE");
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
+                    // Local Pause override
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
+            
             setTimeout(() => { isRemoteUpdate.current = false; }, 500);
         }
     });
@@ -161,14 +166,16 @@ export default function Viewer() {
     isWatching.current = true; 
     videoRef.current.muted = false;
 
+    // ✅ FORCE SYNC: Jump to correct time immediately
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
-    // Force UI update so it doesn't say "Host Paused"
     const statusToSend = type === 'PAUSE' ? 'PAUSE' : 'LIVE';
     setIsPaused(type === 'PAUSE');
-    setStatus(type === 'PAUSE' ? "Host Paused" : "LIVE");
     
+    if (type === 'PAUSE') setStatus("Host Paused");
+    else setStatus("LIVE");
+
     socket.emit('viewer-status-update', { roomId, status: statusToSend });
 
     if (type === 'PLAY') {
@@ -179,13 +186,29 @@ export default function Viewer() {
     }
   };
 
-  if (isKicked) return <div className="flex h-screen w-screen bg-black items-center justify-center font-sans text-white">Kicked</div>;
+  // ✅ KICKED SCREEN UI FIX
+  if (isKicked) {
+      return (
+          <div className="flex h-screen w-screen bg-black items-center justify-center font-sans">
+              <div className="relative z-10 bg-red-950/20 backdrop-blur-xl border border-red-500/20 p-10 rounded-3xl text-center shadow-2xl">
+                  <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                      <span className="text-4xl">🚫</span>
+                  </div>
+                  <h1 className="text-2xl font-bold text-red-500 mb-2">Access Denied</h1>
+                  <p className="text-red-400/60 mb-8 text-sm">You have been removed from this party.</p>
+                  <Link to="/" className="inline-block px-8 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition shadow-lg shadow-red-900/20">
+                      Return Home
+                  </Link>
+              </div>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/10 via-black to-black pointer-events-none"></div>
+          </div>
+      );
+  }
 
   if (!isLoggedIn) {
       return (
           <div className="flex h-screen w-screen bg-black items-center justify-center font-sans relative">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-violet-900/20 via-black to-black"></div>
-              {/* ✅ Go to Home Button (Restored) */}
               <div className="absolute top-6 left-6 z-10"><Link to="/" className="text-zinc-400 hover:text-white flex items-center gap-2 transition group"><span className="text-xl group-hover:-translate-x-1 transition">←</span> <span className="font-bold">Home</span></Link></div>
               <form onSubmit={handleLogin} className="z-10 bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl border border-white/10 flex flex-col gap-6 w-96 shadow-2xl relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500"></div>
@@ -200,12 +223,7 @@ export default function Viewer() {
   return (
     <div className="flex flex-col h-screen w-screen bg-black overflow-hidden font-sans">
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
-         <div className="flex items-center gap-6">
-             {/* ✅ Go to Home Button (Restored) */}
-             <Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link>
-             <div className="h-6 w-px bg-white/10 hidden md:block"></div>
-             <div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{roomId}</span></div>
-         </div>
+         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{roomId}</span></div></div>
          <div className="flex items-center gap-3">
              {!showChat && !isEnded && <button onClick={() => setShowChat(true)} className="text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white px-3 py-1.5 rounded-full border border-white/10 transition flex items-center gap-2"><span>💬</span> Chat</button>}
              <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${isEnded ? 'bg-red-500' : status === 'LIVE' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div><span className="text-xs font-bold uppercase text-zinc-400">{status}</span></div>
