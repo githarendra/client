@@ -6,7 +6,7 @@ export default function Chat({ socket, roomId, toggleChat, username }) {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    // ✅ Logic: Messages coming from socket are ALWAYS from others
+    // ✅ Logic: Messages coming from the server are ALWAYS from someone else
     const handleReceive = (data) => {
       setMessages((prev) => [...prev, { ...data, isMe: false }]);
     };
@@ -28,10 +28,10 @@ export default function Chat({ socket, roomId, toggleChat, username }) {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
-      // 1. Send to others
+      // 1. Send to server (server will broadcast to others)
       socket.emit('send-message', messageData);
       
-      // 2. Add to my screen immediately (isMe: true)
+      // 2. Add to MY screen immediately as "Me" (Purple/Right)
       setMessages((prev) => [...prev, { ...messageData, isMe: true }]);
       setMsg("");
     }
@@ -48,6 +48,7 @@ export default function Chat({ socket, roomId, toggleChat, username }) {
         {messages.map((m, i) => (
           <div key={i} className={`flex flex-col ${m.isMe ? 'items-end' : 'items-start'}`}>
             <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm shadow-sm relative ${m.isMe ? 'bg-violet-600 text-white rounded-br-none' : 'bg-zinc-800 text-zinc-200 rounded-bl-none'}`}>
+              {/* ✅ Show Name ONLY if it's NOT me */}
               {!m.isMe && <span className="block text-[10px] text-violet-300 font-bold mb-1 opacity-80">{m.username}</span>}
               <p className="leading-relaxed">{m.text}</p>
             </div>
