@@ -4,7 +4,6 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ CONNECT TO RENDER
 const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
 
 export default function Viewer() {
@@ -14,7 +13,6 @@ export default function Viewer() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Connecting...");
   const [showPlayButton, setShowPlayButton] = useState(false);
-  const [btnText, setBtnText] = useState("Join Watch Party");
   const [showChat, setShowChat] = useState(true);
   
   const [isPaused, setIsPaused] = useState(false);
@@ -41,7 +39,6 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ FIXED PATH FOR RENDER
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -72,6 +69,11 @@ export default function Viewer() {
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
             videoRef.current.srcObject = hostStream;
+            
+            // ✅ NEW STRATEGY: Play immediately (muted) to prevent deadlock
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(e => console.log("Autoplay waiting for user interaction..."));
+
             setStatus("Ready to Join");
             setShowPlayButton(true);
         }
@@ -154,22 +156,23 @@ export default function Viewer() {
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
-  // ✅ FIXED: Anti-Freeze Join Logic
+  // ✅ SIMPLIFIED JOIN LOGIC (Impossible to freeze)
   const handleManualPlay = () => {
     if (!videoRef.current) return;
-    
-    // 1. Immediately update UI (Removes the button instantly)
-    setBtnText("Joining...");
+
+    // 1. Hide Button INSTANTLY
     setShowPlayButton(false);
     setStatus("Connected");
     isWatching.current = true; 
     isRemoteUpdate.current = true;
 
-    // 2. Set the time
+    // 2. Unmute the video (It's already playing in background)
+    videoRef.current.muted = false;
+
+    // 3. Sync State
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
-    // 3. Handle Play/Pause in background (Don't await!)
     if (type === 'PAUSE') {
         videoRef.current.pause();
         setIsPaused(true);
@@ -182,19 +185,12 @@ export default function Viewer() {
         isLocallyPaused.current = false;
         socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
         
-        // Try to play, but don't block the UI if it fails
-        videoRef.current.play().catch(err => {
-            console.warn("Autoplay blocked, attempting mute...", err);
-            videoRef.current.muted = true;
-            videoRef.current.play().catch(e => console.error("Playback failed", e));
-        });
+        // Force play one last time to be sure
+        videoRef.current.play().catch(e => console.log("Final play check", e));
     }
 
     setTimeout(() => { isRemoteUpdate.current = false; }, 200);
   };
-
-  // Note: finalizeJoin is no longer needed as logic is inside handleManualPlay
-  // I have removed it to keep the code clean.
 
   if (isKicked) {
       return (
@@ -243,7 +239,7 @@ export default function Viewer() {
             <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80">
               <div className="bg-neutral-900 p-8 rounded-xl border border-neutral-700 flex flex-col items-center gap-4 shadow-2xl">
                 <h2 className="text-xl font-bold text-white">Stream Ready</h2>
-                <button onClick={handleManualPlay} className="bg-white text-black px-8 py-3 rounded font-bold hover:bg-gray-200 transition transform active:scale-95">{btnText}</button>
+                <button onClick={handleManualPlay} className="bg-white text-black px-8 py-3 rounded font-bold hover:bg-gray-200 transition transform active:scale-95">Join Watch Party</button>
               </div>
             </div>
           )}
