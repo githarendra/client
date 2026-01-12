@@ -4,6 +4,7 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
+// ✅ Connect to Render
 const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
 
 export default function Viewer() {
@@ -141,6 +142,7 @@ export default function Viewer() {
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
+    // ✅ FIX: Force update status immediately so Host sees "Watching"
     if (type === 'PAUSE') {
         videoRef.current.pause();
         setIsPaused(true);
@@ -166,7 +168,7 @@ export default function Viewer() {
       );
   }
 
-  // ✅ THEMED JOIN SCREEN
+  // ✅ THEME FIX: Exact "Midnight Violet" Login UI from Host
   if (!isLoggedIn) {
       return (
           <div className="flex h-screen w-screen bg-black items-center justify-center font-sans relative">
@@ -178,12 +180,11 @@ export default function Viewer() {
                   <div className="text-center">
                       <div className="w-16 h-16 bg-violet-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎫</div>
                       <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Join Party</h1>
-                      <div className="bg-black/50 p-2 rounded-lg border border-white/5 inline-flex items-center gap-2 text-zinc-400 text-xs font-mono">
-                          <span className="select-all">{roomId}</span>
-                      </div>
+                      <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold">Room ID</p>
+                      <div className="font-mono text-violet-300 text-sm mt-1">{roomId}</div>
                   </div>
                   <div className="flex flex-col gap-2 text-left">
-                      <label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Name</label>
+                      <label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Alias</label>
                       <input ref={nameInputRef} type="text" placeholder="e.g. Viewer Vinny" className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 outline-none transition" autoFocus />
                   </div>
                   <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 rounded-xl transition-all hover:scale-[1.02] shadow-lg shadow-violet-900/20">Enter Cinema</button>
