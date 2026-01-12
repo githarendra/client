@@ -4,7 +4,6 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ CONNECT TO RENDER
 const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
 
 export default function Host() {
@@ -21,15 +20,17 @@ export default function Host() {
   const [showChat, setShowChat] = useState(true);
   
   const videoRef = useRef();
+  const canvasRef = useRef(); // ✅ NEW: Hidden Canvas
   const myPeer = useRef();
   const streamRef = useRef(null);
   const nameInputRef = useRef();
   const calledPeers = useRef({});
+  const animationFrameRef = useRef();
 
   useEffect(() => {
       return () => {
           socket.emit('leave-room');
-          if (isBroadcasting) socket.emit('stop-broadcast', roomId);
+          if (isBroadcasting) stopBroadcast();
       };
   }, [isBroadcasting, roomId]);
 
@@ -52,7 +53,6 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      socket.emit('host-started-stream', roomId);
     });
 
     socket.on('update-user-list', (updatedUsers) => {
@@ -62,7 +62,6 @@ export default function Host() {
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
-          // Sync immediately
           if(videoRef.current) {
               const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
               socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
@@ -74,6 +73,7 @@ export default function Host() {
         socket.off('user-connected');
         socket.off('update-user-list');
         if(myPeer.current) myPeer.current.destroy();
+        cancelAnimationFrame(animationFrameRef.current);
     }
   }, [isLoggedIn, roomId]);
 
@@ -82,7 +82,7 @@ export default function Host() {
       calledPeers.current[userId] = true;
       setTimeout(() => {
           try {
-              console.log(`📞 Calling User ${userId} with stream`);
+              console.log("Calling user:", userId);
               myPeer.current.call(userId, stream);
               setTimeout(() => { calledPeers.current[userId] = false; }, 2000); 
           } catch(err) { calledPeers.current[userId] = false; }
@@ -104,45 +104,70 @@ export default function Host() {
     }
   };
 
+  // ✅ NEW: The Magic Loop. Draws video frame to canvas continuously.
+  const drawLoop = () => {
+      if (videoRef.current && canvasRef.current && !videoRef.current.ended) {
+          const ctx = canvasRef.current.getContext('2d');
+          ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+          animationFrameRef.current = requestAnimationFrame(drawLoop);
+      }
+  };
+
   const startBroadcast = async () => {
-    const video = videoRef.current; if (!video) return;
-    try { 
-        // 1. Ensure Audio is Active for Capture
-        video.muted = false; 
-        video.volume = 1.0; 
-        
-        // 2. Capture Stream
-        let stream;
-        if (video.captureStream) {
-            stream = video.captureStream(30);
-        } else if (video.mozCaptureStream) {
-            stream = video.mozCaptureStream(30);
-        } else {
-            throw new Error("Browser not supported. Use Chrome or Firefox.");
-        }
-        
-        console.log("🎥 Stream Captured:", stream.getTracks());
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
 
-        streamRef.current = stream; 
-        setIsBroadcasting(true); 
-        setStatus("BROADCASTING"); 
+    try {
+        // 1. Setup Audio (Unmute locally to capture)
+        video.muted = false;
+        video.volume = 1.0;
         
-        // 3. Notify Server
-        socket.emit('host-started-stream', roomId); 
-        
-        // 4. Force a Play/Pause sync to wake up viewers
-        socket.emit('video-sync', { roomId, type: 'PLAY', time: video.currentTime });
-        
-        // Note: We do NOT force pause here. We let the video run so tracks generate data.
+        // 2. Setup Canvas Dimensions
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
 
-    } catch (err) { alert(err.message); }
+        // 3. Start the Drawing Loop (Keeps stream alive even when paused)
+        drawLoop();
+
+        // 4. Capture Video from Canvas
+        const canvasStream = canvas.captureStream(30); // 30 FPS
+        const videoTrack = canvasStream.getVideoTracks()[0];
+
+        // 5. Capture Audio from Video Element
+        let audioStream;
+        if (video.captureStream) audioStream = video.captureStream();
+        else if (video.mozCaptureStream) audioStream = video.mozCaptureStream();
+        
+        const audioTrack = audioStream ? audioStream.getAudioTracks()[0] : null;
+
+        // 6. Combine Tracks
+        const combinedStream = new MediaStream();
+        if (videoTrack) combinedStream.addTrack(videoTrack);
+        if (audioTrack) combinedStream.addTrack(audioTrack);
+
+        streamRef.current = combinedStream;
+        setIsBroadcasting(true);
+        setStatus("BROADCASTING");
+        socket.emit('host-started-stream', roomId);
+        
+        // 7. Initial Sync
+        socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
+
+    } catch (err) {
+        alert("Error: " + err.message);
+    }
   };
 
   const stopBroadcast = () => {
-    socket.emit('stop-broadcast', roomId); 
-    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
-    if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; }
-    setIsBroadcasting(false); setStatus("Stopped");
+    socket.emit('stop-broadcast', roomId);
+    cancelAnimationFrame(animationFrameRef.current);
+    if (streamRef.current) { 
+        streamRef.current.getTracks().forEach(t => t.stop()); 
+        streamRef.current = null; 
+    }
+    setIsBroadcasting(false); 
+    setStatus("Stopped");
   };
   
   const handleSync = (type) => { 
@@ -194,7 +219,11 @@ export default function Host() {
           {!fileSelected ? (
             <div className="text-neutral-600 text-center"><p className="text-5xl mb-4">🎬</p><p className="text-xl">Select a video to begin</p></div>
           ) : (
-            <video ref={videoRef} controls className="h-full w-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
+            <>
+                {/* Hidden Canvas for Processing */}
+                <canvas ref={canvasRef} className="hidden" />
+                <video ref={videoRef} controls className="h-full w-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
+            </>
           )}
         </div>
         <div className={`${showChat ? 'block' : 'hidden'} h-full`}><Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} /></div>
