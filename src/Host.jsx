@@ -53,7 +53,7 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ SEND NAME: Pass username to server
+      // ✅ Send Name Here
       socket.emit('host-started-stream', { roomId, username });
     });
 
@@ -66,19 +66,6 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
-    // ✅ NEW: Respond to specific viewer sync request
-    socket.on('request-sync-from-host', (requesterId) => {
-        if(videoRef.current) {
-            const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
-            socket.emit('video-sync', { 
-                roomId, 
-                type: state, 
-                time: videoRef.current.currentTime,
-                targetSocketId: requesterId // Send ONLY to the new guy
-            });
-        }
-    });
-
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
@@ -93,7 +80,6 @@ export default function Host() {
         socket.off('user-connected');
         socket.off('update-user-list');
         socket.off('receive-message', handleMessage);
-        socket.off('request-sync-from-host');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
@@ -144,6 +130,7 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("BROADCASTING"); 
         
+        // ✅ Send Name Here too
         socket.emit('host-started-stream', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
