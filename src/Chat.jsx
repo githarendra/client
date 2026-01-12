@@ -4,7 +4,6 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
   const [msg, setMsg] = useState("");
   const messagesEndRef = useRef(null);
 
-  // Auto-scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -19,43 +18,98 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
-      // 1. Send to server (so others get it)
       socket.emit('send-message', messageData);
-      
-      // 2. Add to MY list immediately (as "Me")
       setMessages((prev) => [...prev, { ...messageData, isMe: true }]);
       setMsg("");
     }
   };
 
   return (
-    <div className="flex flex-col h-full w-80 bg-zinc-950 border-l border-white/10 shadow-2xl z-40 relative">
-      <div className="h-16 flex items-center justify-between px-4 border-b border-white/10 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-10">
-        <div><h2 className="text-white font-bold text-sm tracking-wide">Live Chat</h2><span className="text-[10px] text-emerald-400 flex items-center gap-1">● Online</span></div>
-        <button onClick={toggleChat} className="text-zinc-500 hover:text-white transition p-2 rounded-full hover:bg-white/5">✕</button>
+    <div className="flex flex-col h-full w-80 bg-black/60 backdrop-blur-xl border-l border-white/10 shadow-2xl z-40 relative shrink-0 transition-all duration-300 ease-in-out">
+      
+      {/* 🟢 Header with Glass Effect */}
+      <div className="h-16 flex items-center justify-between px-5 border-b border-white/5 bg-white/5 backdrop-blur-md sticky top-0 z-10 shadow-lg shadow-black/20">
+        <div>
+          <h2 className="text-white font-bold text-sm tracking-wide drop-shadow-md">Live Chat</h2>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider">Online</span>
+          </div>
+        </div>
+        <button 
+          onClick={toggleChat} 
+          className="text-zinc-400 hover:text-white transition-all hover:bg-white/10 p-2 rounded-full active:scale-95"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-zinc-950/50">
-        {messages.length === 0 && <div className="text-center text-zinc-700 mt-10 opacity-50"><p className="text-4xl mb-2">💬</p><p className="text-xs">No messages yet.</p></div>}
+      {/* 💬 Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-zinc-600 opacity-60 animate-in fade-in duration-700">
+            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-3">
+                <span className="text-3xl">👋</span>
+            </div>
+            <p className="text-sm font-medium">No messages yet.</p>
+            <p className="text-xs">Be the first to say hello!</p>
+          </div>
+        )}
         
         {messages.map((m, i) => (
-          <div key={i} className={`flex flex-col ${m.isMe ? 'items-end' : 'items-start'}`}>
-            <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-sm shadow-sm relative break-words ${m.isMe ? 'bg-violet-600 text-white rounded-br-none' : 'bg-zinc-800 text-zinc-200 rounded-bl-none'}`}>
-              {!m.isMe && <span className="block text-[10px] text-violet-300 font-bold mb-1 opacity-80">{m.username}</span>}
-              <p className="leading-relaxed">{m.text}</p>
+          <div key={i} className={`flex flex-col ${m.isMe ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
+            
+            {/* Name Label (Only for others) */}
+            {!m.isMe && (
+              <span className="text-[10px] text-zinc-400 ml-3 mb-1 font-bold tracking-wide">
+                {m.username}
+              </span>
+            )}
+
+            {/* Message Bubble */}
+            <div 
+              className={`max-w-[85%] px-4 py-2.5 text-sm shadow-lg relative break-words leading-relaxed ${
+                m.isMe 
+                ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white rounded-2xl rounded-tr-sm shadow-violet-900/20' 
+                : 'bg-zinc-800/80 backdrop-blur-sm border border-white/5 text-zinc-100 rounded-2xl rounded-tl-sm'
+              }`}
+            >
+              <p>{m.text}</p>
             </div>
-            <span className="text-[9px] text-zinc-600 mt-1 px-1 select-none">{m.time}</span>
+
+            {/* Time Stamp */}
+            <span className={`text-[9px] text-zinc-600 mt-1 px-1 select-none font-medium ${m.isMe ? 'mr-1' : 'ml-1'}`}>
+              {m.time}
+            </span>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={sendMessage} className="p-3 bg-zinc-900 border-t border-white/10">
-        <div className="relative flex items-center">
-          <input type="text" value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Type a message..." className="w-full bg-black/50 text-white border border-zinc-800 rounded-full py-2.5 pl-4 pr-10 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/20 text-sm transition placeholder-zinc-600" />
-          <button type="submit" disabled={!msg.trim()} className="absolute right-1 p-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-full transition disabled:opacity-0 disabled:pointer-events-none transform active:scale-90">➤</button>
-        </div>
-      </form>
+      {/* ⌨️ Input Area */}
+      <div className="p-4 bg-black/40 border-t border-white/5 backdrop-blur-lg">
+        <form onSubmit={sendMessage} className="relative flex items-center group">
+          <input
+            type="text"
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+            placeholder="Type a message..."
+            className="w-full bg-zinc-900/50 text-white border border-zinc-700/50 rounded-full py-3 pl-5 pr-12 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 text-sm transition-all placeholder-zinc-600 hover:border-zinc-600"
+          />
+          <button 
+            type="submit" 
+            disabled={!msg.trim()}
+            className="absolute right-1.5 p-2 bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-all disabled:opacity-0 disabled:scale-75 disabled:pointer-events-none transform active:scale-90 shadow-lg shadow-violet-900/30"
+          >
+            <svg className="w-4 h-4 translate-x-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
