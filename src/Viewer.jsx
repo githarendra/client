@@ -26,8 +26,6 @@ export default function Viewer() {
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
-  
-  // ✅ RESTORED: The "Don't Force Me" Logic
   const isLocallyPaused = useRef(false); 
   const isRemoteUpdate = useRef(false); 
 
@@ -66,7 +64,7 @@ export default function Viewer() {
         if(videoRef.current) {
             videoRef.current.srcObject = hostStream;
             videoRef.current.muted = true;
-            videoRef.current.play().catch(e => console.log("Waiting for user interaction..."));
+            videoRef.current.play().catch(e => console.log("Autoplay waiting..."));
             setStatus("Ready to Join");
             setShowPlayButton(true);
         }
@@ -90,17 +88,17 @@ export default function Viewer() {
         if(myPeer.current) socket.emit('join-room', roomId, myPeer.current.id, username);
     });
 
-    // ✅ LOGIC RESTORED: Handle Sync safely
+    // ✅ LOGIC: State 2 Remote Update
     socket.on('video-sync', (data) => {
         hostState.current = data; 
         
         if (videoRef.current && isWatching.current) {
-            // 1. Sync Time if drifted
             if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) {
                 videoRef.current.currentTime = data.time;
             }
 
-            isRemoteUpdate.current = true; // Mark as remote event so we don't trigger local pause logic
+            // Flag this as a server command so we ignore the 'onPause' event it triggers
+            isRemoteUpdate.current = true;
 
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
@@ -108,19 +106,19 @@ export default function Viewer() {
                 setStatus("Host Paused");
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
             } else if(data.type === 'PLAY') {
-                // Only play if USER hasn't manually paused
                 if (!isLocallyPaused.current) {
                     videoRef.current.play().catch(() => {});
                     setIsPaused(false);
                     setStatus("LIVE");
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
-                    // Keep paused, tell host
+                    // We are locally paused, so ignore the play command but update status
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
             
-            setTimeout(() => { isRemoteUpdate.current = false; }, 100);
+            // Reset flag after a short delay
+            setTimeout(() => { isRemoteUpdate.current = false; }, 500);
         }
     });
 
@@ -144,17 +142,15 @@ export default function Viewer() {
     };
   }, [isLoggedIn, roomId]);
 
-  // ✅ HANDLERS for manual click on video
+  // ✅ Logic: Local User Interactions
   const onVideoPlay = () => {
       if (isRemoteUpdate.current) return;
-      // User clicked play -> Rejoin the party
       isLocallyPaused.current = false;
       socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
   };
 
   const onVideoPause = () => {
       if (isRemoteUpdate.current) return;
-      // User clicked pause -> Stay paused even if host plays
       isLocallyPaused.current = true;
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
@@ -183,17 +179,7 @@ export default function Viewer() {
     }
   };
 
-  if (isKicked) {
-      return (
-          <div className="flex h-screen w-screen bg-black items-center justify-center font-sans">
-              <div className="text-center p-10 border border-red-500/30 rounded-3xl bg-red-950/20 shadow-2xl backdrop-blur-md">
-                  <div className="text-6xl mb-4">🚫</div>
-                  <h1 className="text-2xl font-bold text-red-500 mb-2">Access Denied</h1>
-                  <Link to="/" className="inline-block px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold transition">Back to Home</Link>
-              </div>
-          </div>
-      );
-  }
+  if (isKicked) return <div className="flex h-screen w-screen bg-black items-center justify-center font-sans text-white">Kicked</div>;
 
   if (!isLoggedIn) {
       return (
