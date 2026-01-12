@@ -4,7 +4,6 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ CONNECT TO RENDER
 const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
 
 export default function Host() {
@@ -42,7 +41,6 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ FIXED PATH FOR RENDER
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -106,9 +104,10 @@ export default function Host() {
   const startBroadcast = async () => {
     const video = videoRef.current; if (!video) return;
     try { 
-        video.pause();
+        // ✅ CRITICAL FIX: Ensure audio is captured
+        video.muted = false; 
+        video.volume = 1.0; 
         
-        // ✅ SUPPORT FIREFOX & CHROME
         let stream;
         if (video.captureStream) {
             stream = video.captureStream(30);
@@ -119,16 +118,9 @@ export default function Host() {
         }
         
         streamRef.current = stream; 
-        
         setIsBroadcasting(true); 
         setStatus("BROADCASTING (PAUSED)"); 
-        
         socket.emit('host-started-stream', roomId); 
-        socket.emit('video-sync', { 
-            roomId, 
-            type: 'PAUSE', 
-            time: video.currentTime 
-        });
 
     } catch (err) { alert(err.message); }
   };
