@@ -154,47 +154,47 @@ export default function Viewer() {
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
-  const handleManualPlay = async () => {
+  // ✅ FIXED: Anti-Freeze Join Logic
+  const handleManualPlay = () => {
     if (!videoRef.current) return;
+    
+    // 1. Immediately update UI (Removes the button instantly)
     setBtnText("Joining...");
-    try {
-        await videoRef.current.play();
-        finalizeJoin();
-    } catch (err) {
-        try {
+    setShowPlayButton(false);
+    setStatus("Connected");
+    isWatching.current = true; 
+    isRemoteUpdate.current = true;
+
+    // 2. Set the time
+    const { type, time } = hostState.current;
+    if (Number.isFinite(time)) videoRef.current.currentTime = time;
+
+    // 3. Handle Play/Pause in background (Don't await!)
+    if (type === 'PAUSE') {
+        videoRef.current.pause();
+        setIsPaused(true);
+        setStatus("Host Paused");
+        isLocallyPaused.current = false; 
+        socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
+    } else {
+        setIsPaused(false);
+        setStatus("LIVE");
+        isLocallyPaused.current = false;
+        socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
+        
+        // Try to play, but don't block the UI if it fails
+        videoRef.current.play().catch(err => {
+            console.warn("Autoplay blocked, attempting mute...", err);
             videoRef.current.muted = true;
-            await videoRef.current.play();
-            finalizeJoin();
-            alert("Joined muted.");
-        } catch (err2) { setBtnText("Try Again"); }
+            videoRef.current.play().catch(e => console.error("Playback failed", e));
+        });
     }
+
+    setTimeout(() => { isRemoteUpdate.current = false; }, 200);
   };
 
-  const finalizeJoin = () => {
-      setShowPlayButton(false);
-      setStatus("Connected");
-      isWatching.current = true; 
-      
-      isRemoteUpdate.current = true;
-
-      const { type, time } = hostState.current;
-      if (Number.isFinite(time)) videoRef.current.currentTime = time;
-
-      if (type === 'PAUSE') {
-          videoRef.current.pause();
-          setIsPaused(true);
-          setStatus("Host Paused");
-          isLocallyPaused.current = false; 
-          socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
-      } else {
-          setIsPaused(false);
-          setStatus("LIVE");
-          isLocallyPaused.current = false;
-          socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
-      }
-
-      setTimeout(() => { isRemoteUpdate.current = false; }, 200);
-  };
+  // Note: finalizeJoin is no longer needed as logic is inside handleManualPlay
+  // I have removed it to keep the code clean.
 
   if (isKicked) {
       return (
