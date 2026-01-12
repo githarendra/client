@@ -79,9 +79,8 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
+      {/* Input Area - RESTRUCTURED */}
       <div className="p-4 bg-black/40 border-t border-white/5 backdrop-blur-lg relative">
-        {/* ✅ EMOJI POPUP FIXED: Absolute positioning relative to this container */}
         {showEmoji && (
           <div className="absolute bottom-full mb-4 left-4 z-50 bg-zinc-900 border border-white/10 rounded-2xl p-2 shadow-2xl grid grid-cols-4 gap-1 animate-in zoom-in-95 duration-200">
             {QUICK_EMOJIS.map(e => (
@@ -90,13 +89,36 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
           </div>
         )}
 
-        <form onSubmit={sendMessage} className="relative flex items-center group gap-2">
-          <button type="button" onClick={() => setShowEmoji(!showEmoji)} className={`p-3 rounded-full transition-all active:scale-95 ${showEmoji ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}>
+        {/* Form Container */}
+        <form onSubmit={sendMessage} className="flex items-center gap-2">
+          
+          {/* ✅ Emoji Button: Fixed Size & No Shrink */}
+          <button 
+            type="button" 
+            onClick={() => setShowEmoji(!showEmoji)} 
+            className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 flex-shrink-0 ${showEmoji ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
+          >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           </button>
-          <input type="text" value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Type a message..." className="flex-1 bg-zinc-900/50 text-white border border-zinc-700/50 rounded-full py-3 px-5 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 text-sm transition-all placeholder-zinc-600 hover:border-zinc-600" />
-          <button type="submit" disabled={!msg.trim()} className="p-3 bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-all disabled:opacity-0 disabled:scale-75 disabled:pointer-events-none transform active:scale-90 shadow-lg shadow-violet-900/30">
-            <svg className="w-5 h-5 translate-x-px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12h14M12 5l7 7-7 7"/></svg>
+
+          {/* Input: Grows to fill space */}
+          <input
+            type="text"
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+            placeholder="Type a message..."
+            className="flex-1 bg-zinc-900/50 text-white border border-zinc-700/50 rounded-full py-2.5 px-4 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 text-sm transition-all placeholder-zinc-600 hover:border-zinc-600"
+          />
+          
+          {/* Send Button: Fixed Size & No Shrink */}
+          <button 
+            type="submit" 
+            disabled={!msg.trim()}
+            className="w-10 h-10 flex items-center justify-center bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-all disabled:opacity-0 disabled:scale-75 disabled:pointer-events-none transform active:scale-90 shadow-lg shadow-violet-900/30 flex-shrink-0"
+          >
+            <svg className="w-5 h-5 translate-x-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
           </button>
         </form>
       </div>
