@@ -11,9 +11,8 @@ export default function Viewer() {
   const [username, setUsername] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Connecting...");
-  const [showPlayButton, setShowPlayButton] = useState(false);
+  // ❌ Removed showPlayButton
   const [showChat, setShowChat] = useState(true);
-  const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -49,7 +48,6 @@ export default function Viewer() {
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
       socket.emit('join-room', roomId, id, username); 
-      // Handshake: Ask for current status immediately
       socket.emit('request-sync', roomId);
       
       retryInterval.current = setInterval(() => {
@@ -67,12 +65,10 @@ export default function Viewer() {
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
             videoRef.current.srcObject = hostStream;
-            // Attempt initial play (muted usually works)
-            videoRef.current.muted = true;
-            videoRef.current.play()
-                .then(() => setShowPlayButton(false))
-                .catch(() => setShowPlayButton(true));
-            setStatus("Ready to Join");
+            videoRef.current.muted = true; 
+            // Try auto-play
+            videoRef.current.play().catch(e => console.log("Autoplay blocked, user must use controls"));
+            setStatus("Ready");
         }
       });
     });
@@ -100,7 +96,6 @@ export default function Viewer() {
         hostState.current = data; 
         
         if (videoRef.current && isWatching.current) {
-            // Time Sync threshold (0.5s)
             if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) {
                 videoRef.current.currentTime = data.time;
             }
@@ -109,31 +104,15 @@ export default function Viewer() {
 
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
-                setIsPaused(true);
                 setStatus("Host Paused");
+                // ✅ FIX: Ensure Viewer sends status update when HOST pauses
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
-            } 
-            else if(data.type === 'PLAY') {
+            } else if(data.type === 'PLAY') {
                 if (!isLocallyPaused.current) {
-                    // ✅ CRITICAL FIX: Try to play. If browser blocks, show button.
-                    const playPromise = videoRef.current.play();
-                    
-                    if (playPromise !== undefined) {
-                        playPromise
-                        .then(() => {
-                            setIsPaused(false);
-                            setStatus("LIVE");
-                            socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
-                        })
-                        .catch((error) => {
-                            console.log("Auto-play blocked by browser. User must interact.", error);
-                            // Show the Play button so user can click to sync
-                            setShowPlayButton(true);
-                            setIsPaused(true);
-                        });
-                    }
+                    videoRef.current.play().catch(() => {});
+                    setStatus("LIVE");
+                    socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
-                    // User manually paused, so we respect that
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
@@ -145,7 +124,7 @@ export default function Viewer() {
     socket.on('broadcast-stopped', () => {
         setIsEnded(true);
         setStatus("Host Disconnected");
-        isWatching.current = false;
+        isWatching.current = false; 
         receivingCall.current = false;
         if(videoRef.current) videoRef.current.srcObject = null;
     });
@@ -166,7 +145,7 @@ export default function Viewer() {
   const onVideoPlay = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = false;
-      setIsPaused(false);
+      isWatching.current = true;
       setStatus("LIVE");
       socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
   };
@@ -174,35 +153,10 @@ export default function Viewer() {
   const onVideoPause = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = true;
-      setIsPaused(true);
       setStatus("Paused");
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
-  const handleManualPlay = () => {
-    if (!videoRef.current) return;
-    
-    setShowPlayButton(false);
-    setStatus("Connected");
-    isWatching.current = true; 
-    videoRef.current.muted = false;
-
-    // Force Sync immediately
-    socket.emit('request-sync', roomId);
-
-    // Attempt Play
-    const playPromise = videoRef.current.play();
-    if(playPromise !== undefined) {
-        playPromise.catch(e => console.log("Manual play error", e));
-    }
-    
-    isLocallyPaused.current = false;
-    setIsPaused(false);
-    setStatus("LIVE");
-    socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
-  };
-
-  // ✅ RED GLASS "KICKED" SCREEN
   if (isKicked) {
       return (
           <div className="flex h-screen w-screen bg-black items-center justify-center font-sans">
@@ -235,7 +189,7 @@ export default function Viewer() {
       );
   }
 
-  // ✅ Status Colors: Green = Live, Yellow = Any Pause
+  // Color Logic
   const getStatusColor = () => {
       if (status === 'LIVE') return 'bg-green-500 animate-pulse';
       if (status.includes('Paused') || status.includes('Connecting')) return 'bg-yellow-500';
@@ -264,21 +218,6 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {showPlayButton && !isEnded && (
-                <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="text-center">
-                        <div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center mx-auto mb-6 animate-pulse">
-                            <span className="text-4xl">🍿</span>
-                        </div>
-                        <h2 className="text-3xl font-bold text-white mb-2">Ready to Watch</h2>
-                        <p className="text-zinc-400 mb-6 text-sm">Host is streaming. Click to sync.</p>
-                        <button onClick={handleManualPlay} className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:bg-zinc-200 transition transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">
-                            Join Stream
-                        </button>
-                    </div>
-                </div>
-            )}
-            {isPaused && !isEnded && !showPlayButton && <div className="absolute inset-0 flex items-center justify-center pointer-events-none"><div className="bg-black/60 p-8 rounded-full backdrop-blur-md border border-white/10"><svg className="w-16 h-16 text-white/90 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></div></div>}
             {isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950"><div className="text-center p-12 border border-zinc-800 rounded-3xl bg-black shadow-2xl"><div className="text-6xl mb-6 grayscale opacity-50">📺</div><h1 className="text-2xl font-bold text-zinc-300 mb-2">Host Offline</h1><p className="text-zinc-600">Waiting for signal...</p></div></div>}
           </div>
         </div>
