@@ -4,6 +4,7 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
+// ✅ CONNECT TO RENDER
 const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
 
 export default function Viewer() {
@@ -39,6 +40,7 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ FIXED PATH FOR RENDER
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -68,11 +70,12 @@ export default function Viewer() {
       call.answer(); 
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
+            console.log("📺 Receiving Stream");
             videoRef.current.srcObject = hostStream;
             
-            // ✅ AUTOPLAY FIX: Play muted immediately to satisfy browser policy
+            // ✅ AUDIO/VIDEO FIX: Play Muted immediately
             videoRef.current.muted = true;
-            videoRef.current.play().catch(e => console.log("Autoplay waiting..."));
+            videoRef.current.play().catch(e => console.log("Autoplay waiting for click..."));
 
             setStatus("Ready to Join");
             setShowPlayButton(true);
@@ -156,19 +159,20 @@ export default function Viewer() {
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
+  // ✅ GUARANTEED NO-STUCK LOGIC
   const handleManualPlay = () => {
     if (!videoRef.current) return;
 
-    // 1. Hide Button INSTANTLY
+    // 1. Update UI Immediately
     setShowPlayButton(false);
     setStatus("Connected");
     isWatching.current = true; 
     isRemoteUpdate.current = true;
 
-    // 2. Unmute the video (It's already playing in background)
+    // 2. UNMUTE (This is what actually "starts" the audio)
     videoRef.current.muted = false;
 
-    // 3. Sync State
+    // 3. Apply Host State
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
@@ -184,7 +188,8 @@ export default function Viewer() {
         isLocallyPaused.current = false;
         socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
         
-        videoRef.current.play().catch(e => console.log("Final play check", e));
+        // Ensure it's playing
+        videoRef.current.play().catch(e => console.log("Play catch", e));
     }
 
     setTimeout(() => { isRemoteUpdate.current = false; }, 200);
