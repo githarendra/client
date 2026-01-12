@@ -25,6 +25,8 @@ export default function Host() {
   const nameInputRef = useRef();
   const calledPeers = useRef({});
 
+  // ... (Login & Effect logic remains same as previous step, ensure you copy the handlers below)
+
   useEffect(() => {
       return () => {
           socket.emit('leave-room');
@@ -51,7 +53,7 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      socket.emit('host-started-stream', roomId);
+      socket.emit('host-started-stream', { roomId, username });
     });
 
     socket.on('update-user-list', (updatedUsers) => {
@@ -63,7 +65,6 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
-    // ✅ FIX: Reply to the specific viewer who just joined
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
@@ -71,7 +72,7 @@ export default function Host() {
                 roomId, 
                 type: state, 
                 time: videoRef.current.currentTime,
-                targetSocketId: requesterId // Send only to new user
+                targetSocketId: requesterId
             });
         }
     });
@@ -139,7 +140,7 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("BROADCASTING"); 
         
-        socket.emit('host-started-stream', roomId); 
+        socket.emit('host-started-stream', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
@@ -155,8 +156,19 @@ export default function Host() {
   const handleSync = (type) => { 
       if(videoRef.current) {
           socket.emit('video-sync', { roomId, type, time: videoRef.current.currentTime }); 
-          if(isBroadcasting) setStatus(type === 'PLAY' ? "BROADCASTING LIVE" : "BROADCASTING (PAUSED)");
+          // ✅ COLOR LOGIC FIX
+          if(isBroadcasting) {
+              if (type === 'PLAY') setStatus("BROADCASTING");
+              else setStatus("PAUSED");
+          }
       }
+  };
+
+  // ✅ Status Dot Color Logic
+  const getStatusDotColor = () => {
+      if (!isBroadcasting) return 'bg-zinc-600';
+      if (status === 'BROADCASTING') return 'bg-green-500 animate-pulse'; // Green for Live
+      return 'bg-yellow-500'; // Yellow for Paused
   };
 
   if (!isLoggedIn) {
@@ -181,11 +193,13 @@ export default function Host() {
         <div className="flex gap-3 items-center">
             <button onClick={handleShare} className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition font-bold text-sm ${inviteCopied ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-zinc-900 hover:bg-zinc-800 border-white/10 text-zinc-300'}`}><span>{inviteCopied ? '✅' : '🔗'}</span><span>{inviteCopied ? 'Copied!' : 'Share'}</span></button>
             <button onClick={() => setShowUserPanel(!showUserPanel)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-full transition"><span className="text-sm">👥 {users.length}</span></button>
+            
+            {/* ✅ GREEN/YELLOW DOT */}
             <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
-                {/* ✅ GREEN DOT CHANGE */}
-                <div className={`w-2 h-2 rounded-full ${isBroadcasting ? 'bg-green-500 animate-pulse' : 'bg-zinc-600'}`}></div>
+                <div className={`w-2 h-2 rounded-full ${getStatusDotColor()}`}></div>
                 <span className="text-xs font-bold uppercase text-zinc-400">{status}</span>
             </div>
+
             {!showChat && <button onClick={() => setShowChat(true)} className="p-2 bg-zinc-900 hover:bg-zinc-800 rounded-full border border-white/10 transition text-zinc-400 hover:text-white">💬</button>}
         </div>
       </div>
