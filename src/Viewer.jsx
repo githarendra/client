@@ -154,19 +154,26 @@ export default function Viewer() {
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
+  // ✅ FIXED DEADLOCK LOGIC
   const handleManualPlay = async () => {
     if (!videoRef.current) return;
     setBtnText("Joining...");
-    try {
-        await videoRef.current.play();
-        finalizeJoin();
-    } catch (err) {
+
+    // Check if Host is actually playing. If PAUSED, just join immediately.
+    if (hostState.current.type !== 'PAUSE') {
         try {
-            videoRef.current.muted = true;
             await videoRef.current.play();
             finalizeJoin();
-            alert("Joined muted.");
-        } catch (err2) { setBtnText("Try Again"); }
+        } catch (err) {
+            try {
+                videoRef.current.muted = true;
+                await videoRef.current.play();
+                finalizeJoin();
+                alert("Joined muted.");
+            } catch (err2) { setBtnText("Try Again"); }
+        }
+    } else {
+        finalizeJoin();
     }
   };
 
