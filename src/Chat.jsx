@@ -2,7 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 
 export default function Chat({ socket, roomId, toggleChat, username, messages, setMessages }) {
   const [msg, setMsg] = useState("");
+  const [showEmoji, setShowEmoji] = useState(false);
   const messagesEndRef = useRef(null);
+
+  const QUICK_EMOJIS = ['🔥', '😂', '❤️', '🎉', '👍', '😭', '👀', '🍿'];
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -21,13 +24,19 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
       socket.emit('send-message', messageData);
       setMessages((prev) => [...prev, { ...messageData, isMe: true }]);
       setMsg("");
+      setShowEmoji(false);
     }
+  };
+
+  const addEmoji = (emoji) => {
+    setMsg((prev) => prev + emoji);
+    setShowEmoji(false);
   };
 
   return (
     <div className="flex flex-col h-full w-80 bg-black/60 backdrop-blur-xl border-l border-white/10 shadow-2xl z-40 relative shrink-0 transition-all duration-300 ease-in-out">
       
-      {/* 🟢 Header with Glass Effect */}
+      {/* 🟢 Header */}
       <div className="h-16 flex items-center justify-between px-5 border-b border-white/5 bg-white/5 backdrop-blur-md sticky top-0 z-10 shadow-lg shadow-black/20">
         <div>
           <h2 className="text-white font-bold text-sm tracking-wide drop-shadow-md">Live Chat</h2>
@@ -55,58 +64,38 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
                 <span className="text-3xl">👋</span>
             </div>
             <p className="text-sm font-medium">No messages yet.</p>
-            <p className="text-xs">Be the first to say hello!</p>
           </div>
         )}
         
         {messages.map((m, i) => (
           <div key={i} className={`flex flex-col ${m.isMe ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-2 fade-in duration-300`}>
-            
-            {/* Name Label (Only for others) */}
-            {!m.isMe && (
-              <span className="text-[10px] text-zinc-400 ml-3 mb-1 font-bold tracking-wide">
-                {m.username}
-              </span>
-            )}
-
-            {/* Message Bubble */}
-            <div 
-              className={`max-w-[85%] px-4 py-2.5 text-sm shadow-lg relative break-words leading-relaxed ${
-                m.isMe 
-                ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white rounded-2xl rounded-tr-sm shadow-violet-900/20' 
-                : 'bg-zinc-800/80 backdrop-blur-sm border border-white/5 text-zinc-100 rounded-2xl rounded-tl-sm'
-              }`}
-            >
+            {!m.isMe && <span className="text-[10px] text-zinc-400 ml-3 mb-1 font-bold tracking-wide">{m.username}</span>}
+            <div className={`max-w-[85%] px-4 py-2.5 text-sm shadow-lg relative break-words leading-relaxed ${m.isMe ? 'bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white rounded-2xl rounded-tr-sm shadow-violet-900/20' : 'bg-zinc-800/80 backdrop-blur-sm border border-white/5 text-zinc-100 rounded-2xl rounded-tl-sm'}`}>
               <p>{m.text}</p>
             </div>
-
-            {/* Time Stamp */}
-            <span className={`text-[9px] text-zinc-600 mt-1 px-1 select-none font-medium ${m.isMe ? 'mr-1' : 'ml-1'}`}>
-              {m.time}
-            </span>
+            <span className={`text-[9px] text-zinc-600 mt-1 px-1 select-none font-medium ${m.isMe ? 'mr-1' : 'ml-1'}`}>{m.time}</span>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
 
       {/* ⌨️ Input Area */}
-      <div className="p-4 bg-black/40 border-t border-white/5 backdrop-blur-lg">
-        <form onSubmit={sendMessage} className="relative flex items-center group">
-          <input
-            type="text"
-            value={msg}
-            onChange={(e) => setMsg(e.target.value)}
-            placeholder="Type a message..."
-            className="w-full bg-zinc-900/50 text-white border border-zinc-700/50 rounded-full py-3 pl-5 pr-12 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 text-sm transition-all placeholder-zinc-600 hover:border-zinc-600"
-          />
-          <button 
-            type="submit" 
-            disabled={!msg.trim()}
-            className="absolute right-1.5 p-2 bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-all disabled:opacity-0 disabled:scale-75 disabled:pointer-events-none transform active:scale-90 shadow-lg shadow-violet-900/30"
-          >
-            <svg className="w-4 h-4 translate-x-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
+      <div className="p-4 bg-black/40 border-t border-white/5 backdrop-blur-lg relative">
+        {showEmoji && (
+          <div className="absolute bottom-20 left-4 bg-zinc-900 border border-white/10 rounded-2xl p-2 shadow-2xl grid grid-cols-4 gap-1 animate-in zoom-in-95 duration-200">
+            {QUICK_EMOJIS.map(e => (
+              <button key={e} onClick={() => addEmoji(e)} className="p-2 hover:bg-white/10 rounded-lg transition text-xl">{e}</button>
+            ))}
+          </div>
+        )}
+
+        <form onSubmit={sendMessage} className="relative flex items-center group gap-2">
+          <button type="button" onClick={() => setShowEmoji(!showEmoji)} className={`p-3 rounded-full transition-all active:scale-95 ${showEmoji ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </button>
+          <input type="text" value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Type a message..." className="flex-1 bg-zinc-900/50 text-white border border-zinc-700/50 rounded-full py-3 px-5 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 text-sm transition-all placeholder-zinc-600 hover:border-zinc-600" />
+          <button type="submit" disabled={!msg.trim()} className="p-3 bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-all disabled:opacity-0 disabled:scale-75 disabled:pointer-events-none transform active:scale-90 shadow-lg shadow-violet-900/30">
+            <svg className="w-5 h-5 translate-x-px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
         </form>
       </div>
