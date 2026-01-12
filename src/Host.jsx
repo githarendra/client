@@ -20,6 +20,9 @@ export default function Host() {
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [showChat, setShowChat] = useState(true);
   
+  // ✅ NEW: State for the "Copied!" feedback
+  const [inviteCopied, setInviteCopied] = useState(false);
+  
   const videoRef = useRef();
   const myPeer = useRef();
   const streamRef = useRef(null);
@@ -106,6 +109,14 @@ export default function Host() {
     }
   };
 
+  // ✅ NEW: Share Logic
+  const handleShare = () => {
+      const inviteUrl = `${window.location.origin}/viewer/${roomId}`;
+      navigator.clipboard.writeText(inviteUrl);
+      setInviteCopied(true);
+      setTimeout(() => setInviteCopied(false), 2000);
+  };
+
   const startBroadcast = async () => {
     const video = videoRef.current; if (!video) return;
     try { 
@@ -161,13 +172,19 @@ export default function Host() {
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-3 group"><div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center font-bold text-white group-hover:scale-110 transition">P</div><h1 className="text-lg font-bold tracking-tight text-zinc-200 group-hover:text-white transition">Party<span className="text-violet-500">Time</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Room ID</span><span className="text-sm font-mono text-zinc-300 leading-none">{roomId}</span></div></div>
         <div className="flex gap-3 items-center">
+            
+            {/* ✅ NEW: Share Button */}
+            <button onClick={handleShare} className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition font-bold text-sm ${inviteCopied ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-zinc-900 hover:bg-zinc-800 border-white/10 text-zinc-300'}`}>
+                <span>{inviteCopied ? '✅' : '🔗'}</span>
+                <span>{inviteCopied ? 'Copied!' : 'Share'}</span>
+            </button>
+
             <button onClick={() => setShowUserPanel(!showUserPanel)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-full transition"><span className="text-sm">👥 {users.length}</span></button>
             <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${isBroadcasting ? 'bg-red-500 animate-pulse' : 'bg-zinc-600'}`}></div><span className="text-xs font-bold uppercase text-zinc-400">{status}</span></div>
             {!showChat && <button onClick={() => setShowChat(true)} className="p-2 bg-zinc-900 hover:bg-zinc-800 rounded-full border border-white/10 transition text-zinc-400 hover:text-white">💬</button>}
         </div>
       </div>
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
-        {/* ✅ FIXED: Restored Ambient Effect for Video Container */}
         <div className="flex-1 flex flex-col relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
           
           {showUserPanel && (
@@ -194,7 +211,6 @@ export default function Host() {
           
           <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden relative">
             {!fileSelected ? (
-                // ✅ ADDED: Gradient Background for Empty State
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800/30 via-black to-black">
                     <div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div>
                     <h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2>
