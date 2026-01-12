@@ -11,8 +11,8 @@ export default function Viewer() {
   const [username, setUsername] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Connecting...");
-  // ❌ Removed showPlayButton
   const [showChat, setShowChat] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -66,8 +66,7 @@ export default function Viewer() {
         if(videoRef.current) {
             videoRef.current.srcObject = hostStream;
             videoRef.current.muted = true; 
-            // Try auto-play
-            videoRef.current.play().catch(e => console.log("Autoplay blocked, user must use controls"));
+            videoRef.current.play().catch(e => console.log("Autoplay blocked"));
             setStatus("Ready");
         }
       });
@@ -78,7 +77,9 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    socket.on('host-name-update', (name) => setHostName(name));
+    socket.on('host-name-update', (name) => {
+        setHostName(name);
+    });
 
     socket.on('kicked', () => {
         setIsKicked(true);
@@ -105,7 +106,6 @@ export default function Viewer() {
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
                 setStatus("Host Paused");
-                // ✅ FIX: Ensure Viewer sends status update when HOST pauses
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
             } else if(data.type === 'PLAY') {
                 if (!isLocallyPaused.current) {
@@ -161,14 +161,10 @@ export default function Viewer() {
       return (
           <div className="flex h-screen w-screen bg-black items-center justify-center font-sans">
               <div className="relative z-10 bg-red-950/30 backdrop-blur-2xl border border-red-500/20 p-10 rounded-3xl text-center shadow-[0_0_100px_-20px_rgba(239,68,68,0.3)]">
-                  <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-red-500/20">
-                      <span className="text-4xl">🚫</span>
-                  </div>
+                  <div className="w-20 h-20 bg-gradient-to-br from-red-500 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-red-500/20"><span className="text-4xl">🚫</span></div>
                   <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">Access Denied</h1>
                   <p className="text-red-200/60 mb-8 font-medium">You have been removed from this party.</p>
-                  <Link to="/" className="inline-flex items-center gap-2 px-8 py-3.5 bg-white text-red-600 rounded-xl font-bold transition hover:bg-zinc-200 shadow-xl">
-                      <span>←</span> Return Home
-                  </Link>
+                  <Link to="/" className="inline-flex items-center gap-2 px-8 py-3.5 bg-white text-red-600 rounded-xl font-bold transition hover:bg-zinc-200 shadow-xl"><span>←</span> Return Home</Link>
               </div>
           </div>
       );
@@ -189,7 +185,7 @@ export default function Viewer() {
       );
   }
 
-  // Color Logic
+  // ✅ Status Colors
   const getStatusColor = () => {
       if (status === 'LIVE') return 'bg-green-500 animate-pulse';
       if (status.includes('Paused') || status.includes('Connecting')) return 'bg-yellow-500';
@@ -199,7 +195,12 @@ export default function Viewer() {
   return (
     <div className="flex flex-col h-screen w-screen bg-black overflow-hidden font-sans">
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
-         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-2 group"><span className="text-xl group-hover:scale-110 transition">🏠</span><h1 className="text-lg font-bold tracking-tighter hidden md:block text-zinc-300">Party<span className="text-blue-500">View</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div></div>
+         <div className="flex items-center gap-6">
+             {/* ✅ PartyTime Logo on Viewer Side */}
+             <Link to="/" className="flex items-center gap-3 group"><div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center font-bold text-white group-hover:scale-110 transition">P</div><h1 className="text-lg font-bold tracking-tight text-zinc-200 group-hover:text-white transition">Party<span className="text-violet-500">Time</span></h1></Link>
+             <div className="h-6 w-px bg-white/10 hidden md:block"></div>
+             <div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div>
+         </div>
          <div className="flex items-center gap-3">
              {!showChat && !isEnded && <button onClick={() => setShowChat(true)} className="text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white px-3 py-1.5 rounded-full border border-white/10 transition flex items-center gap-2"><span>💬</span> Chat</button>}
              <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
