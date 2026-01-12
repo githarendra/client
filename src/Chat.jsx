@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
+import EmojiPicker, { Theme } from 'emoji-picker-react'; // ✅ Import the full picker
 
 export default function Chat({ socket, roomId, toggleChat, username, messages, setMessages }) {
   const [msg, setMsg] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const messagesEndRef = useRef(null);
-
-  const QUICK_EMOJIS = ['🔥', '😂', '❤️', '🎉', '👍', '😭', '👀', '🍿'];
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -28,9 +27,10 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
     }
   };
 
-  const addEmoji = (emoji) => {
-    setMsg((prev) => prev + emoji);
-    setShowEmoji(false);
+  const onEmojiClick = (emojiData) => {
+    setMsg((prev) => prev + emojiData.emoji);
+    // Keep picker open for multiple emojis, or remove this line to close after one
+    // setShowEmoji(false); 
   };
 
   return (
@@ -79,29 +79,26 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area - RESTRUCTURED */}
+      {/* Input Area */}
       <div className="p-4 bg-black/40 border-t border-white/5 backdrop-blur-lg relative">
+        
+        {/* ✅ Full Emoji Picker */}
         {showEmoji && (
-          <div className="absolute bottom-full mb-4 left-4 z-50 bg-zinc-900 border border-white/10 rounded-2xl p-2 shadow-2xl grid grid-cols-4 gap-1 animate-in zoom-in-95 duration-200">
-            {QUICK_EMOJIS.map(e => (
-              <button key={e} onClick={() => addEmoji(e)} className="p-2 hover:bg-white/10 rounded-lg transition text-xl">{e}</button>
-            ))}
+          <div className="absolute bottom-full mb-2 left-0 z-50 animate-in slide-in-from-bottom-5 duration-200">
+            <EmojiPicker 
+                theme={Theme.DARK} 
+                onEmojiClick={onEmojiClick}
+                width={300}
+                height={400}
+            />
           </div>
         )}
 
-        {/* Form Container */}
-        <form onSubmit={sendMessage} className="flex items-center gap-2">
-          
-          {/* ✅ Emoji Button: Fixed Size & No Shrink */}
-          <button 
-            type="button" 
-            onClick={() => setShowEmoji(!showEmoji)} 
-            className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 flex-shrink-0 ${showEmoji ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        <form onSubmit={sendMessage} className="relative flex items-center gap-2">
+          <button type="button" onClick={() => setShowEmoji(!showEmoji)} className={`w-10 h-10 flex items-center justify-center rounded-full transition-all active:scale-95 flex-shrink-0 ${showEmoji ? 'bg-violet-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}>
+            {showEmoji ? '✕' : '😀'}
           </button>
-
-          {/* Input: Grows to fill space */}
+          
           <input
             type="text"
             value={msg}
@@ -110,15 +107,8 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
             className="flex-1 bg-zinc-900/50 text-white border border-zinc-700/50 rounded-full py-2.5 px-4 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/50 text-sm transition-all placeholder-zinc-600 hover:border-zinc-600"
           />
           
-          {/* Send Button: Fixed Size & No Shrink */}
-          <button 
-            type="submit" 
-            disabled={!msg.trim()}
-            className="w-10 h-10 flex items-center justify-center bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-all disabled:opacity-0 disabled:scale-75 disabled:pointer-events-none transform active:scale-90 shadow-lg shadow-violet-900/30 flex-shrink-0"
-          >
-            <svg className="w-5 h-5 translate-x-px" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
+          <button type="submit" disabled={!msg.trim()} className="w-10 h-10 flex items-center justify-center bg-violet-600 hover:bg-violet-500 text-white rounded-full transition-all disabled:opacity-0 disabled:scale-75 disabled:pointer-events-none transform active:scale-90 shadow-lg shadow-violet-900/30 flex-shrink-0">
+            <svg className="w-5 h-5 translate-x-px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
         </form>
       </div>
