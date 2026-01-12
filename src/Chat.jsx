@@ -36,7 +36,7 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
   return (
     <div className="flex flex-col h-full w-80 bg-black/60 backdrop-blur-xl border-l border-white/10 shadow-2xl z-40 relative shrink-0 transition-all duration-300 ease-in-out">
       
-      {/* 🟢 Header */}
+      {/* Header */}
       <div className="h-16 flex items-center justify-between px-5 border-b border-white/5 bg-white/5 backdrop-blur-md sticky top-0 z-10 shadow-lg shadow-black/20">
         <div>
           <h2 className="text-white font-bold text-sm tracking-wide drop-shadow-md">Live Chat</h2>
@@ -56,7 +56,7 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
         </button>
       </div>
 
-      {/* 💬 Messages Area */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-zinc-600 opacity-60 animate-in fade-in duration-700">
@@ -79,10 +79,11 @@ export default function Chat({ socket, roomId, toggleChat, username, messages, s
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ⌨️ Input Area */}
+      {/* Input */}
       <div className="p-4 bg-black/40 border-t border-white/5 backdrop-blur-lg relative">
+        {/* ✅ EMOJI POPUP FIXED: Absolute positioning relative to this container */}
         {showEmoji && (
-          <div className="absolute bottom-20 left-4 bg-zinc-900 border border-white/10 rounded-2xl p-2 shadow-2xl grid grid-cols-4 gap-1 animate-in zoom-in-95 duration-200">
+          <div className="absolute bottom-full mb-4 left-4 z-50 bg-zinc-900 border border-white/10 rounded-2xl p-2 shadow-2xl grid grid-cols-4 gap-1 animate-in zoom-in-95 duration-200">
             {QUICK_EMOJIS.map(e => (
               <button key={e} onClick={() => addEmoji(e)} className="p-2 hover:bg-white/10 rounded-lg transition text-xl">{e}</button>
             ))}
