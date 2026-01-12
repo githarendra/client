@@ -64,7 +64,7 @@ export default function Viewer() {
         if(videoRef.current) {
             videoRef.current.srcObject = hostStream;
             videoRef.current.muted = true;
-            videoRef.current.play().catch(e => console.log("Autoplay waiting..."));
+            videoRef.current.play().catch(e => console.log("Waiting for user interaction..."));
             setStatus("Ready to Join");
             setShowPlayButton(true);
         }
@@ -88,7 +88,6 @@ export default function Viewer() {
         if(myPeer.current) socket.emit('join-room', roomId, myPeer.current.id, username);
     });
 
-    // ✅ LOGIC: State 2 Remote Update
     socket.on('video-sync', (data) => {
         hostState.current = data; 
         
@@ -97,8 +96,7 @@ export default function Viewer() {
                 videoRef.current.currentTime = data.time;
             }
 
-            // Flag this as a server command so we ignore the 'onPause' event it triggers
-            isRemoteUpdate.current = true;
+            isRemoteUpdate.current = true; // Mark as remote event
 
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
@@ -112,12 +110,11 @@ export default function Viewer() {
                     setStatus("LIVE");
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
                 } else {
-                    // We are locally paused, so ignore the play command but update status
+                    // Stay paused locally, but respect the update
                     socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
                 }
             }
             
-            // Reset flag after a short delay
             setTimeout(() => { isRemoteUpdate.current = false; }, 500);
         }
     });
@@ -142,16 +139,20 @@ export default function Viewer() {
     };
   }, [isLoggedIn, roomId]);
 
-  // ✅ Logic: Local User Interactions
+  // ✅ FIXED: Update Local UI State when user clicks Play manually
   const onVideoPlay = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = false;
+      setIsPaused(false); // Remove overlay
+      setStatus("LIVE");
       socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
   };
 
   const onVideoPause = () => {
       if (isRemoteUpdate.current) return;
       isLocallyPaused.current = true;
+      setIsPaused(true); // Show overlay
+      setStatus("PAUSED");
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
