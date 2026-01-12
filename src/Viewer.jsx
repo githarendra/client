@@ -27,8 +27,6 @@ export default function Viewer() {
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
-  const isLocallyPaused = useRef(false); 
-  const isRemoteUpdate = useRef(false); 
 
   const handleLogin = (e) => {
       e.preventDefault();
@@ -68,19 +66,12 @@ export default function Viewer() {
       call.answer(); 
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
-            console.log("📺 Stream received with tracks:", hostStream.getTracks());
+            console.log("📺 Receiving Canvas Stream");
             videoRef.current.srcObject = hostStream;
             
-            // ✅ CRITICAL: Autoplay Muted. 
-            // Browsers BLOCK video if you try to play unmuted automatically.
-            videoRef.current.muted = true;
-            
-            const playPromise = videoRef.current.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(error => {
-                    console.log("Autoplay prevented:", error);
-                });
-            }
+            // ✅ CRITICAL: Autoplay Muted to start buffering data immediately
+            videoRef.current.muted = true; 
+            videoRef.current.play().catch(e => console.log("Autoplay waiting for click..."));
 
             setStatus("Ready to Join");
             setShowPlayButton(true);
@@ -105,31 +96,16 @@ export default function Viewer() {
     socket.on('video-sync', (data) => {
         hostState.current = data; 
         
-        if (videoRef.current && isWatching.current) {
-            if(Math.abs(videoRef.current.currentTime - data.time) > 0.5) {
-                videoRef.current.currentTime = data.time;
-            }
-
-            isRemoteUpdate.current = true;
-
+        if (isWatching.current) {
             if(data.type === 'PAUSE') {
-                videoRef.current.pause();
                 setIsPaused(true);
                 setStatus("Host Paused");
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
             } else if(data.type === 'PLAY') {
                 setIsPaused(false);
                 setStatus("LIVE");
-                
-                if (!isLocallyPaused.current) {
-                    videoRef.current.play().catch(() => {});
-                    socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
-                } else {
-                    socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
-                }
+                socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
             }
-            
-            setTimeout(() => { isRemoteUpdate.current = false; }, 100);
         }
     });
 
@@ -152,52 +128,26 @@ export default function Viewer() {
     };
   }, [isLoggedIn, roomId]);
 
-  const onVideoPlay = () => {
-      if (isRemoteUpdate.current) return;
-      isLocallyPaused.current = false;
-      socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
-  };
-
-  const onVideoPause = () => {
-      if (isRemoteUpdate.current) return;
-      isLocallyPaused.current = true;
-      socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
-  };
-
-  // ✅ GUARANTEED NO-STUCK JOIN
+  // ✅ SIMPLE JOIN: Just unmutes the video
   const handleManualPlay = () => {
     if (!videoRef.current) return;
 
-    // 1. Hide Button INSTANTLY (Never gets stuck)
     setShowPlayButton(false);
     setStatus("Connected");
     isWatching.current = true; 
-    isRemoteUpdate.current = true;
 
-    // 2. Unmute (Because we started muted)
+    // Unmute to hear audio
     videoRef.current.muted = false;
-
-    // 3. Sync
-    const { type, time } = hostState.current;
-    if (Number.isFinite(time)) videoRef.current.currentTime = time;
-
-    if (type === 'PAUSE') {
-        videoRef.current.pause();
-        setIsPaused(true);
+    
+    // Check state
+    if(hostState.current.type === 'PAUSE') {
         setStatus("Host Paused");
-        isLocallyPaused.current = false; 
-        socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
     } else {
-        setIsPaused(false);
         setStatus("LIVE");
-        isLocallyPaused.current = false;
-        socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
-        
-        // Force play
-        videoRef.current.play().catch(e => console.log("Final play check", e));
     }
-
-    setTimeout(() => { isRemoteUpdate.current = false; }, 200);
+    
+    // Force play in case browser paused it
+    videoRef.current.play().catch(e => console.log("Play error", e));
   };
 
   if (isKicked) {
@@ -238,7 +188,7 @@ export default function Viewer() {
         <div className="flex-1 bg-black flex items-center justify-center relative min-w-0">
           <video 
             ref={videoRef} 
-            controls 
+            controls={false} // Hide controls, user only watches
             className="w-full h-full object-contain" 
             onPause={onVideoPause} 
             onPlay={onVideoPlay} 
