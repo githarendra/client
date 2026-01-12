@@ -53,8 +53,7 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ SEND NAME on initial connect
-      socket.emit('host-started-stream', { roomId, username });
+      socket.emit('host-started-stream', roomId);
     });
 
     socket.on('update-user-list', (updatedUsers) => {
@@ -130,8 +129,7 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("BROADCASTING"); 
         
-        // ✅ SEND NAME on Broadcast Start
-        socket.emit('host-started-stream', { roomId, username });
+        socket.emit('host-started-stream', roomId); 
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
