@@ -4,7 +4,6 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ Connect to Render
 const socket = io('https://watch-party-server-1o5x.onrender.com', { withCredentials: true, autoConnect: true });
 
 export default function Viewer() {
@@ -15,11 +14,10 @@ export default function Viewer() {
   const [status, setStatus] = useState("Connecting...");
   const [showPlayButton, setShowPlayButton] = useState(false);
   const [showChat, setShowChat] = useState(true);
-  
   const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
-
+  
   const videoRef = useRef();
   const myPeer = useRef();
   const nameInputRef = useRef();
@@ -28,8 +26,6 @@ export default function Viewer() {
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
-  const isLocallyPaused = useRef(false); 
-  const isRemoteUpdate = useRef(false); 
 
   const handleLogin = (e) => {
       e.preventDefault();
@@ -50,7 +46,6 @@ export default function Viewer() {
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
       socket.emit('join-room', roomId, id, username); 
-      
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) {
              console.log("Pinging Host...");
@@ -63,13 +58,15 @@ export default function Viewer() {
       if (receivingCall.current) return;
       receivingCall.current = true;
       clearInterval(retryInterval.current);
-      
       setIsEnded(false); 
 
       call.answer(); 
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
             videoRef.current.srcObject = hostStream;
+            // Autoplay Muted
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(e => console.log("Waiting for user interaction..."));
             setStatus("Ready to Join");
             setShowPlayButton(true);
         }
@@ -98,26 +95,17 @@ export default function Viewer() {
                 videoRef.current.currentTime = data.time;
             }
 
-            isRemoteUpdate.current = true;
-
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
                 setIsPaused(true);
                 setStatus("Host Paused");
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
             } else if(data.type === 'PLAY') {
+                videoRef.current.play().catch(() => {});
                 setIsPaused(false);
                 setStatus("LIVE");
-                
-                if (!isLocallyPaused.current) {
-                    videoRef.current.play().catch(() => {});
-                    socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
-                } else {
-                    socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
-                }
+                socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
             }
-            
-            setTimeout(() => { isRemoteUpdate.current = false; }, 100);
         }
     });
 
@@ -140,53 +128,30 @@ export default function Viewer() {
     };
   }, [isLoggedIn, roomId]);
 
-  const onVideoPlay = () => {
-      if (isRemoteUpdate.current) return;
-      isLocallyPaused.current = false;
-      socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
-  };
-
-  const onVideoPause = () => {
-      if (isRemoteUpdate.current) return;
-      isLocallyPaused.current = true;
-      socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
-  };
-
-  // ✅ LOGIC: Anti-Freeze Join
   const handleManualPlay = () => {
     if (!videoRef.current) return;
     
-    // 1. Hide Button INSTANTLY
     setShowPlayButton(false);
     setStatus("Connected");
     isWatching.current = true; 
-    isRemoteUpdate.current = true;
+    
+    // Unmute
+    videoRef.current.muted = false;
 
-    // 2. Sync Time
     const { type, time } = hostState.current;
     if (Number.isFinite(time)) videoRef.current.currentTime = time;
 
-    // 3. Play/Pause
     if (type === 'PAUSE') {
         videoRef.current.pause();
         setIsPaused(true);
         setStatus("Host Paused");
-        isLocallyPaused.current = false; 
         socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
     } else {
         setIsPaused(false);
         setStatus("LIVE");
-        isLocallyPaused.current = false;
         socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
-        
-        videoRef.current.play().catch(err => {
-            console.warn("Autoplay blocked, attempting mute...", err);
-            videoRef.current.muted = true;
-            videoRef.current.play().catch(e => console.error("Playback failed", e));
-        });
+        videoRef.current.play().catch(e => console.log("Play error", e));
     }
-
-    setTimeout(() => { isRemoteUpdate.current = false; }, 200);
   };
 
   if (isKicked) {
@@ -195,7 +160,6 @@ export default function Viewer() {
               <div className="text-center p-10 border border-red-500/30 rounded-3xl bg-red-950/20 shadow-2xl backdrop-blur-md">
                   <div className="text-6xl mb-4">🚫</div>
                   <h1 className="text-2xl font-bold text-red-500 mb-2">Access Denied</h1>
-                  <p className="text-red-400/80 mb-6">You have been removed from the party.</p>
                   <Link to="/" className="inline-block px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold transition">Back to Home</Link>
               </div>
           </div>
@@ -206,40 +170,23 @@ export default function Viewer() {
   if (!isLoggedIn) {
       return (
           <div className="flex h-screen w-screen bg-black items-center justify-center font-sans relative">
-              {/* Background Effect */}
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-black to-black"></div>
-              
-              <div className="absolute top-6 left-6 z-10">
-                  <Link to="/" className="text-zinc-400 hover:text-white flex items-center gap-2 transition group">
-                      <span className="text-xl group-hover:-translate-x-1 transition">←</span> <span className="font-bold">Exit</span>
-                  </Link>
-              </div>
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-violet-900/20 via-black to-black"></div>
+              <div className="absolute top-6 left-6 z-10"><Link to="/" className="text-zinc-400 hover:text-white flex items-center gap-2 transition group"><span className="text-xl group-hover:-translate-x-1 transition">←</span> <span className="font-bold">Home</span></Link></div>
               
               <form onSubmit={handleLogin} className="z-10 bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl border border-white/10 flex flex-col gap-6 w-96 shadow-2xl relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
-                  
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500"></div>
                   <div className="text-center">
-                      <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎫</div>
-                      <h1 className="text-3xl font-bold text-white tracking-tight mb-1">Join Party</h1>
-                      <div className="bg-black/50 p-2 rounded-lg border border-white/5 inline-flex items-center gap-2 text-zinc-400 text-xs font-mono mt-2">
+                      <div className="w-16 h-16 bg-violet-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎫</div>
+                      <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Join Party</h1>
+                      <div className="bg-black/50 p-2 rounded-lg border border-white/5 inline-flex items-center gap-2 text-zinc-400 text-xs font-mono">
                           <span className="select-all">{roomId}</span>
                       </div>
                   </div>
-                  
                   <div className="flex flex-col gap-2 text-left">
                       <label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Name</label>
-                      <input 
-                          ref={nameInputRef} 
-                          type="text" 
-                          placeholder="e.g. Viewer Vinny" 
-                          className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition placeholder-zinc-600" 
-                          autoFocus 
-                      />
+                      <input ref={nameInputRef} type="text" placeholder="e.g. Viewer Vinny" className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 outline-none transition" autoFocus />
                   </div>
-                  
-                  <button type="submit" className="bg-white hover:bg-zinc-200 text-black font-bold py-3.5 rounded-xl transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-white/10">
-                      Enter Cinema
-                  </button>
+                  <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 rounded-xl transition-all hover:scale-[1.02] shadow-lg shadow-violet-900/20">Enter Cinema</button>
               </form>
           </div>
       );
@@ -260,15 +207,14 @@ export default function Viewer() {
             ref={videoRef} 
             controls 
             className="max-h-full max-w-full shadow-2xl" 
-            onPause={onVideoPause} 
-            onPlay={onVideoPlay} 
+            onPause={() => socket.emit('viewer-status-update', { roomId, status: 'PAUSE' })} 
+            onPlay={() => socket.emit('viewer-status-update', { roomId, status: 'LIVE' })}
           />
           {showPlayButton && !isEnded && (
             <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-500">
               <div className="text-center">
                 <div className="w-20 h-20 rounded-full border-2 border-white/20 flex items-center justify-center mx-auto mb-6 animate-pulse"><span className="text-4xl">🍿</span></div>
                 <h2 className="text-3xl font-bold text-white mb-2">Ready to Watch</h2>
-                <p className="text-zinc-500 mb-8">The host is streaming. Join the party!</p>
                 <button onClick={handleManualPlay} className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:bg-zinc-200 transition transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)]">Join Stream</button>
               </div>
             </div>
