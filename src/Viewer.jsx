@@ -45,10 +45,6 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ 1. JOIN SOCKET ROOM FIRST (Viewer Count Logic)
-    socket.emit('join-room-viewer', { roomId, username });
-    socket.emit('request-sync', roomId);
-
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -58,9 +54,16 @@ export default function Viewer() {
     
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
-      // Also send signal here for redundancy
+      
+      // ✅ VITAL FIX: Join Room ONLY after Peer ID is ready
+      socket.emit('join-room', roomId, id, username); 
+      
+      // Request Sync immediately
+      socket.emit('request-sync', roomId);
+      
+      // Retry in case of packet loss
       retryInterval.current = setInterval(() => {
-          if(!receivingCall.current) socket.emit('join-room-viewer', { roomId, username });
+          if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
       }, 3000);
     });
 
@@ -69,9 +72,6 @@ export default function Viewer() {
       receivingCall.current = true;
       clearInterval(retryInterval.current);
       setIsEnded(false); 
-
-      // ✅ 2. CONNECT PEER (Video Logic)
-      socket.emit('user-connected-video', { roomId, userId: myPeer.current.id });
 
       call.answer(); 
       call.on('stream', (hostStream) => {
@@ -96,7 +96,7 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // ✅ HOST NAME
+    // ✅ HOST NAME LISTENER
     socket.on('host-name-update', (name) => {
         setHostName(name);
     });
@@ -110,7 +110,7 @@ export default function Viewer() {
     socket.on('stream-forced-refresh', () => {
         setIsEnded(false);
         receivingCall.current = false;
-        if(myPeer.current) socket.emit('user-connected-video', { roomId, userId: myPeer.current.id });
+        if(myPeer.current) socket.emit('join-room', roomId, myPeer.current.id, username);
     });
 
     socket.on('video-sync', (data) => {
@@ -181,6 +181,7 @@ export default function Viewer() {
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
+  // ✅ UNMUTE BUTTON
   const unmuteVideo = () => {
       if (videoRef.current) {
           videoRef.current.muted = false;
