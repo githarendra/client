@@ -4,9 +4,9 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
+// ✅ Allow default transports to let Socket.IO negotiate the best connection
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
-    withCredentials: true, 
-    transports: ['polling', 'websocket'],
+    withCredentials: true,
     autoConnect: true 
 });
 
@@ -55,7 +55,6 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ OLD WORKING REGISTRATION
       socket.emit('host-joined', { roomId, username });
     });
 
