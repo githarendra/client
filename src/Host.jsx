@@ -45,9 +45,6 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ 1. IMMEDIATE SOCKET REGISTRATION (Fixes Viewer Count)
-    socket.emit('register-host', { roomId, username });
-
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -57,9 +54,12 @@ export default function Host() {
 
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
-      // Optional: re-register with peer ID if needed later
+      socket.emit('join-room', roomId, id, username);
+      // ✅ VITAL: Tell server we are the Host immediately
+      socket.emit('register-host', { roomId, username });
     });
 
+    // ✅ LISTEN FOR VIEWER UPDATES
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
@@ -81,6 +81,7 @@ export default function Host() {
         }
     });
 
+    // ✅ CALL NEW VIEWER
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
