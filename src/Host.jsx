@@ -4,7 +4,7 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ Stable Connection Settings
+// ✅ CRITICAL: Match Server Transports to fix EIO=4
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
     transports: ['polling', 'websocket'],
@@ -56,15 +56,11 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ Register Immediately
+      // ✅ Register immediately to "claim" the room for Viewer Count
       socket.emit('register-host', { roomId, username });
     });
 
-    // Redundant registration on socket connect
-    socket.on('connect', () => {
-        socket.emit('register-host', { roomId, username });
-    });
-
+    // ✅ Listener for Viewer Count/Details
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
@@ -97,7 +93,6 @@ export default function Host() {
         socket.off('update-user-list');
         socket.off('receive-message');
         socket.off('request-sync-from-host');
-        socket.off('connect');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
@@ -146,6 +141,7 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("LIVE"); 
         
+        // Re-confirm details on broadcast start
         socket.emit('host-started-stream', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
