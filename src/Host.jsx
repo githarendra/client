@@ -5,7 +5,7 @@ import io from 'socket.io-client';
 import Chat from './Chat';
 
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
-    withCredentials: true, 
+    withCredentials: true,
     transports: ['polling', 'websocket'],
     autoConnect: true 
 });
@@ -45,6 +45,9 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ REGISTER ON SOCKET CONNECT (Fixes "0 Viewers")
+    socket.emit('register-host', { roomId, username });
+
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -52,18 +55,13 @@ export default function Host() {
       path: '/peerjs' 
     });
 
-    // 1. Peer Open
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
+      // Re-register just in case
       socket.emit('register-host', { roomId, username });
     });
 
-    // ✅ 2. HEARTBEAT (Fixes "0 Viewers" bug)
-    // Every 5 seconds, remind server we are here
-    const heartbeat = setInterval(() => {
-        socket.emit('heartbeat', { roomId, username, role: 'host' });
-    }, 5000);
-
+    // ✅ LISTEN FOR VIEWER UPDATES
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
@@ -92,7 +90,6 @@ export default function Host() {
     });
 
     return () => {
-        clearInterval(heartbeat);
         socket.off('user-connected');
         socket.off('update-user-list');
         socket.off('receive-message');
@@ -145,6 +142,7 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("LIVE"); 
         
+        // Re-announce host details on stream start
         socket.emit('register-host', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
