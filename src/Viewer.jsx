@@ -29,7 +29,6 @@ export default function Viewer() {
   const myPeer = useRef();
   const nameInputRef = useRef();
   const retryInterval = useRef(null);
-  const receivingCall = useRef(false);
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
@@ -45,9 +44,12 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ JOIN SOCKET IMMEDIATELY (Prevents stuck screen)
-    // Send null ID first just to register presence
-    socket.emit('join-room', roomId, null, username);
+    // ✅ 1. IMMEDIATE SOCKET JOIN (Fixes Waiting/Name Bug)
+    socket.emit('join-room', { roomId, username }, (response) => {
+        if(response && response.hostName) setHostName(response.hostName);
+    });
+    
+    // Request initial sync
     socket.emit('request-sync', roomId);
 
     myPeer.current = new Peer(undefined, {
@@ -57,22 +59,19 @@ export default function Viewer() {
       path: '/peerjs' 
     });
     
+    // ✅ 2. VIDEO SETUP
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
-      // Re-send join with actual Peer ID so Host can call us
-      socket.emit('join-room', roomId, id, username); 
+      // Send video request specifically
+      socket.emit('request-video-connection', { roomId, peerId: id });
       
-      retryInterval.current = setInterval(() => {
-          if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
-      }, 3000);
+      // Heartbeat for Viewer
+      setInterval(() => {
+          socket.emit('heartbeat', { roomId, username, role: 'viewer' });
+      }, 5000);
     });
 
     myPeer.current.on('call', (call) => {
-      if (receivingCall.current) return;
-      receivingCall.current = true;
-      clearInterval(retryInterval.current);
-      setIsEnded(false); 
-
       call.answer(); 
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
@@ -80,7 +79,6 @@ export default function Viewer() {
             videoRef.current.muted = true;
             setIsMuted(true);
             
-            // ✅ AUTO-PLAY LOGIC
             videoRef.current.play()
             .then(() => {
                 setShowUnmuteBtn(true);
@@ -96,8 +94,7 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // ✅ HOST NAME LISTENER
-    socket.on('host-name', (name) => {
+    socket.on('host-name-update', (name) => {
         if(name) setHostName(name);
     });
 
@@ -109,8 +106,7 @@ export default function Viewer() {
 
     socket.on('stream-forced-refresh', () => {
         setIsEnded(false);
-        receivingCall.current = false;
-        if(myPeer.current) socket.emit('join-room', roomId, myPeer.current.id, username);
+        if(myPeer.current) socket.emit('request-video-connection', { roomId, peerId: myPeer.current.id });
     });
 
     socket.on('video-sync', (data) => {
@@ -126,7 +122,6 @@ export default function Viewer() {
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
                 setStatus("Host Paused");
-                // ✅ UPDATE HOST STATUS
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
             } else if(data.type === 'PLAY') {
                 if (!isLocallyPaused.current) {
@@ -150,18 +145,16 @@ export default function Viewer() {
         setIsEnded(true);
         setStatus("Host Disconnected");
         isWatching.current = false; 
-        receivingCall.current = false;
         if(videoRef.current) videoRef.current.srcObject = null;
     });
 
     return () => {
       socket.emit('leave-room'); 
-      clearInterval(retryInterval.current);
       socket.off('video-sync');
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
-      socket.off('host-name');
+      socket.off('host-name-update');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -250,7 +243,6 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {/* ✅ UNMUTE BUTTON (Only appears if audio blocked) */}
             {showUnmuteBtn && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
