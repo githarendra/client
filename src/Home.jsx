@@ -1,11 +1,15 @@
-// client/src/Home.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { v4 as uuidV4 } from 'uuid';
 
 export default function Home() {
-  const navigate = useNavigate(); // ✅ This works now because it's inside App's Router
+  const navigate = useNavigate();
   const [joinId, setJoinId] = useState("");
+
+  // ✅ DYNAMIC TITLE
+  useEffect(() => {
+    document.title = "PartyTime | Watch Together";
+  }, []);
 
   const createRoom = () => {
     navigate(`/host/${uuidV4()}`);
