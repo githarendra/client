@@ -29,7 +29,6 @@ export default function Viewer() {
   const myPeer = useRef();
   const nameInputRef = useRef();
   const retryInterval = useRef(null);
-  const receivingCall = useRef(false);
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
@@ -45,13 +44,17 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ JOIN SOCKET IMMEDIATELY (Fixes "Waiting" Bug)
-    socket.emit('join-room', { roomId, userId: null, username }, (response) => {
-        if(response && response.hostName) setHostName(response.hostName);
+    // ✅ 1. JOIN DATA CHANNEL (IMMEDIATE)
+    // This loads Name, Chat, and Viewer Count instantly
+    socket.emit('join-room-data', { roomId, username }, (response) => {
+        if (response && response.hostName) {
+            setHostName(response.hostName);
+        }
     });
     
     socket.emit('request-sync', roomId);
 
+    // ✅ 2. INIT PEERJS (BACKGROUND)
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -60,21 +63,17 @@ export default function Viewer() {
     });
     
     myPeer.current.on('open', (id) => {
-      setStatus("Waiting for Host...");
-      // Now we have an ID, update the server
-      socket.emit('join-room', { roomId, userId: id, username });
+      setStatus("Waiting for Stream...");
+      // Upgrade connection to include video
+      socket.emit('update-peer-id', { roomId, peerId: id });
       
+      // Retry video connection periodically
       retryInterval.current = setInterval(() => {
-          if(!receivingCall.current) socket.emit('join-room', { roomId, userId: id, username }); 
+          socket.emit('update-peer-id', { roomId, peerId: id });
       }, 3000);
     });
 
     myPeer.current.on('call', (call) => {
-      if (receivingCall.current) return;
-      receivingCall.current = true;
-      clearInterval(retryInterval.current);
-      setIsEnded(false); 
-
       call.answer(); 
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
@@ -110,8 +109,7 @@ export default function Viewer() {
 
     socket.on('stream-forced-refresh', () => {
         setIsEnded(false);
-        receivingCall.current = false;
-        if(myPeer.current) socket.emit('join-room', { roomId, userId: myPeer.current.id, username });
+        if(myPeer.current) socket.emit('update-peer-id', { roomId, peerId: myPeer.current.id });
     });
 
     socket.on('video-sync', (data) => {
@@ -150,7 +148,6 @@ export default function Viewer() {
         setIsEnded(true);
         setStatus("Host Disconnected");
         isWatching.current = false; 
-        receivingCall.current = false;
         if(videoRef.current) videoRef.current.srcObject = null;
     });
 
@@ -233,7 +230,7 @@ export default function Viewer() {
              <div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div>
          </div>
          <div className="flex items-center gap-3">
-             {/* ✅ Chat Button (Always Visible) */}
+             {/* ✅ Chat always visible */}
              {!showChat && !isEnded && <button onClick={() => setShowChat(true)} className="text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white px-3 py-1.5 rounded-full border border-white/10 transition flex items-center gap-2"><span>💬</span> Chat</button>}
              <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
                  <div className={`w-2 h-2 rounded-full ${getStatusColor()}`}></div>
@@ -251,7 +248,7 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {/* ✅ UNMUTE BUTTON (Appears only when needed) */}
+            {/* ✅ Unmute Button */}
             {showUnmuteBtn && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
@@ -260,7 +257,7 @@ export default function Viewer() {
             {isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950"><div className="text-center p-12 border border-zinc-800 rounded-3xl bg-black shadow-2xl"><div className="text-6xl mb-6 grayscale opacity-50">📺</div><h1 className="text-2xl font-bold text-zinc-300 mb-2">Host Offline</h1><p className="text-zinc-600">Waiting for signal...</p></div></div>}
           </div>
         </div>
-        {/* ✅ CHAT (Ensured Visible) */}
+        {/* ✅ Chat Always Rendered */}
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
     </div>
