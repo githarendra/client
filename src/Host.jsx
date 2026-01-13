@@ -45,7 +45,7 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ REGISTER IMMEDIATELY (Fixes Viewer Count)
+    // ✅ REGISTER SOCKET FIRST
     socket.emit('register-host', { roomId, username });
 
     myPeer.current = new Peer(undefined, {
@@ -61,11 +61,11 @@ export default function Host() {
       socket.emit('register-host', { roomId, username });
     });
 
-    // ✅ LISTEN FOR VIEWERS
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
     
+    // ✅ CHAT HANDLER
     const handleMessage = (data) => {
         setMessages((prev) => [...prev, { ...data, isMe: false }]);
     };
