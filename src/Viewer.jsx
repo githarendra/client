@@ -21,7 +21,7 @@ export default function Viewer() {
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
   const [hostName, setHostName] = useState("Party");
-  // ✅ Audio State
+  // Audio
   const [isMuted, setIsMuted] = useState(true);
   const [showUnmuteBtn, setShowUnmuteBtn] = useState(false);
   
@@ -45,6 +45,11 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ 1. JOIN SOCKET (Update Count & Name IMMEDIATELY)
+    socket.emit('join-room', roomId, null, username); // PeerID null for now
+    socket.emit('get-host-name', roomId);
+    socket.emit('request-sync', roomId);
+
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -52,16 +57,12 @@ export default function Viewer() {
       path: '/peerjs' 
     });
     
+    // ✅ 2. CONNECT VIDEO (Update PeerID later)
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
-      
-      // ✅ VITAL FIX: Join Room ONLY after Peer ID is ready
+      // Re-send join with actual Peer ID so Host can call us
       socket.emit('join-room', roomId, id, username); 
       
-      // Request Sync immediately
-      socket.emit('request-sync', roomId);
-      
-      // Retry in case of packet loss
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
       }, 3000);
@@ -96,9 +97,9 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // ✅ HOST NAME LISTENER
+    // ✅ Host Name Logic
     socket.on('host-name-update', (name) => {
-        setHostName(name);
+        if(name) setHostName(name);
     });
 
     socket.on('kicked', () => {
@@ -181,7 +182,6 @@ export default function Viewer() {
       socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
   };
 
-  // ✅ UNMUTE BUTTON
   const unmuteVideo = () => {
       if (videoRef.current) {
           videoRef.current.muted = false;
