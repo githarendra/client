@@ -5,8 +5,7 @@ import io from 'socket.io-client';
 import Chat from './Chat';
 
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
-    withCredentials: true, 
-    transports: ['polling', 'websocket'],
+    withCredentials: true,
     autoConnect: true 
 });
 
@@ -57,7 +56,7 @@ export default function Viewer() {
       socket.emit('join-room', roomId, id, username); 
       // 1. Ask for Sync
       socket.emit('request-sync', roomId);
-      // 2. Ask for Name
+      // 2. Ask for Name (PULL STATE)
       socket.emit('get-host-name', roomId);
       
       retryInterval.current = setInterval(() => {
@@ -81,8 +80,7 @@ export default function Viewer() {
             // ✅ AUTO-PLAY LOGIC
             videoRef.current.play()
             .then(() => {
-                // If it plays muted successfully, show unmute button
-                setShowUnmuteBtn(true);
+                setShowUnmuteBtn(true); // Show button ONLY if play succeeded
                 setStatus("Ready");
             })
             .catch(e => console.log("Autoplay blocked", e));
