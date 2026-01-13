@@ -4,6 +4,7 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
+// ✅ Fix Connection Error
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
     transports: ['polling', 'websocket'],
@@ -20,8 +21,9 @@ export default function Viewer() {
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [hostName, setHostName] = useState("Party");
-  // Audio
+  const [hostName, setHostName] = useState("Party"); // Default Name
+  
+  // ✅ Audio State
   const [isMuted, setIsMuted] = useState(true);
   const [showUnmuteBtn, setShowUnmuteBtn] = useState(false);
   
@@ -45,11 +47,6 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ 1. JOIN SOCKET (Update Count & Name IMMEDIATELY)
-    socket.emit('join-room', roomId, null, username); // PeerID null for now
-    socket.emit('get-host-name', roomId);
-    socket.emit('request-sync', roomId);
-
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -57,15 +54,15 @@ export default function Viewer() {
       path: '/peerjs' 
     });
     
-    // ✅ 2. CONNECT VIDEO (Update PeerID later)
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
-      // Re-send join with actual Peer ID so Host can call us
       socket.emit('join-room', roomId, id, username); 
+      // Handshake: Ask for sync
+      socket.emit('request-sync', roomId);
       
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
-      }, 3000);
+      }, 2000);
     });
 
     myPeer.current.on('call', (call) => {
@@ -97,9 +94,9 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // ✅ Host Name Logic
-    socket.on('host-name-update', (name) => {
-        if(name) setHostName(name);
+    // ✅ HOST NAME LISTENER
+    socket.on('host-name', (name) => {
+        setHostName(name);
     });
 
     socket.on('kicked', () => {
@@ -161,7 +158,7 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
-      socket.off('host-name-update');
+      socket.off('host-name');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -250,6 +247,7 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
+            {/* ✅ UNMUTE BUTTON */}
             {showUnmuteBtn && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
