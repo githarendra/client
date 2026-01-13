@@ -4,10 +4,10 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ Fix Connection Stability
+// ✅ WEBSOCKET ONLY
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
-    transports: ['polling', 'websocket'],
+    transports: ['websocket'],
     autoConnect: true 
 });
 
@@ -21,7 +21,8 @@ export default function Viewer() {
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [hostName, setHostName] = useState("Party"); // Default
+  const [hostName, setHostName] = useState("Party");
+  // Audio State
   const [isMuted, setIsMuted] = useState(true);
   const [showUnmuteBtn, setShowUnmuteBtn] = useState(false);
   
@@ -54,11 +55,18 @@ export default function Viewer() {
     
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
-      socket.emit('join-room', roomId, id, username); 
+      
+      // ✅ JOIN & GET NAME VIA CALLBACK (Best Practice)
+      socket.emit('join-room', { roomId, username }, (response) => {
+          if (response && response.hostName) {
+              setHostName(response.hostName);
+          }
+      });
+      
       socket.emit('request-sync', roomId);
       
       retryInterval.current = setInterval(() => {
-          if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
+          if(!receivingCall.current) socket.emit('join-room', { roomId, username }); 
       }, 3000);
     });
 
@@ -72,7 +80,7 @@ export default function Viewer() {
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
             videoRef.current.srcObject = hostStream;
-            videoRef.current.muted = true; // Auto-play requirement
+            videoRef.current.muted = true;
             setIsMuted(true);
             
             videoRef.current.play()
@@ -90,9 +98,9 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // ✅ LISTEN FOR HOST NAME
-    socket.on('host-name', (name) => {
-        setHostName(name);
+    // Fallback name update
+    socket.on('host-name-update', (name) => {
+        if(name) setHostName(name);
     });
 
     socket.on('kicked', () => {
@@ -104,7 +112,7 @@ export default function Viewer() {
     socket.on('stream-forced-refresh', () => {
         setIsEnded(false);
         receivingCall.current = false;
-        if(myPeer.current) socket.emit('join-room', roomId, myPeer.current.id, username);
+        if(myPeer.current) socket.emit('join-room', { roomId, username });
     });
 
     socket.on('video-sync', (data) => {
@@ -154,7 +162,7 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
-      socket.off('host-name');
+      socket.off('host-name-update');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -221,7 +229,6 @@ export default function Viewer() {
     <div className="flex flex-col h-screen w-screen bg-black overflow-hidden font-sans">
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
          <div className="flex items-center gap-6">
-             {/* ✅ REPLACED ICON WITH LOGO */}
              <Link to="/" className="flex items-center gap-3 group"><div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center font-bold text-white group-hover:scale-110 transition">P</div><h1 className="text-lg font-bold tracking-tight text-zinc-200 group-hover:text-white transition">Party<span className="text-violet-500">Time</span></h1></Link>
              <div className="h-6 w-px bg-white/10 hidden md:block"></div>
              <div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div>
@@ -244,7 +251,6 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {/* ✅ UNMUTE BUTTON (Only appears if audio blocked) */}
             {showUnmuteBtn && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
