@@ -5,8 +5,8 @@ import io from 'socket.io-client';
 import Chat from './Chat';
 
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
-    withCredentials: true, 
-    transports: ['polling', 'websocket'],
+    withCredentials: true,
+    transports: ['polling', 'websocket'], 
     autoConnect: true 
 });
 
@@ -29,14 +29,10 @@ export default function Host() {
   const nameInputRef = useRef();
   const calledPeers = useRef({});
 
-  // ✅ DYNAMIC TITLE
+  // ✅ Initial Title
   useEffect(() => {
-    if (isLoggedIn && username) {
-      document.title = `🔴 Hosting: ${username}`;
-    } else {
-      document.title = "Host a Party - PartyTime";
-    }
-  }, [isLoggedIn, username]);
+    document.title = "Host | PartyTime";
+  }, []);
 
   useEffect(() => {
       return () => {
@@ -48,14 +44,16 @@ export default function Host() {
   const handleLogin = (e) => {
       e.preventDefault();
       const name = nameInputRef.current.value;
-      if(name.trim()) { setUsername(name); setIsLoggedIn(true); }
+      if(name.trim()) { 
+          setUsername(name); 
+          setIsLoggedIn(true); 
+          // ✅ Title: Hosting as Harry
+          document.title = `Hosting as ${name} | PartyTime`;
+      }
   };
 
   useEffect(() => {
     if(!isLoggedIn) return;
-
-    // ✅ REGISTER SOCKET FIRST
-    socket.emit('register-host', { roomId, username });
 
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
@@ -66,11 +64,10 @@ export default function Host() {
 
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
-      // Re-register to be safe
-      socket.emit('register-host', { roomId, username });
+      socket.emit('join-room', roomId, id, username);
+      socket.emit('host-joined', { roomId, username });
     });
 
-    // ✅ LISTEN FOR UPDATES
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
@@ -83,11 +80,10 @@ export default function Host() {
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
-            socket.emit('video-sync', { 
-                roomId, 
-                type: state, 
+            socket.emit('host-sync-data', { 
+                targetSocketId: requesterId,
                 time: videoRef.current.currentTime,
-                targetSocketId: requesterId 
+                state: state
             });
         }
     });
@@ -119,7 +115,9 @@ export default function Host() {
   };
 
   const handleKick = (socketId, userName) => {
-      if(window.confirm(`Kick ${userName}?`)) socket.emit('kick-user', { roomId, socketId });
+      if(window.confirm(`Kick ${userName}?`)) {
+          socket.emit('kick-user', { roomId, socketId });
+      }
   };
 
   const handleFileChange = (e) => {
@@ -145,13 +143,13 @@ export default function Host() {
         let stream;
         if (video.captureStream) stream = video.captureStream(30);
         else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
-        else throw new Error("Browser not supported.");
+        else throw new Error("Browser not supported. Use Chrome or Firefox.");
         
         streamRef.current = stream; 
         setIsBroadcasting(true); 
         setStatus("LIVE"); 
         
-        socket.emit('register-host', { roomId, username });
+        socket.emit('host-joined', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
