@@ -2,8 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Peer from 'peerjs';
 import io from 'socket.io-client';
-// ✅ NEW: Import WebTorrent
-import WebTorrent from 'webtorrent';
 import Chat from './Chat';
 
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
@@ -36,15 +34,20 @@ export default function Host() {
   const calledPeers = useRef({});
   const torrentClient = useRef(null); // ✅ Ref for Torrent Client
 
-  useEffect(() => {
+useEffect(() => {
     document.title = "Host | PartyTime";
-    // ✅ Initialize WebTorrent Client
-    torrentClient.current = new WebTorrent();
+
+    // ✅ CHANGE THIS LINE: Use window.WebTorrent
+    if (window.WebTorrent) {
+        torrentClient.current = new window.WebTorrent();
+    } else {
+        console.error("WebTorrent script not loaded!");
+    }
 
     return () => {
         if(torrentClient.current) torrentClient.current.destroy();
     }
-  }, []);
+}, []);
 
   useEffect(() => {
       return () => {
@@ -343,3 +346,4 @@ export default function Host() {
     </div>
   );
 }
+
