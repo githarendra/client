@@ -53,6 +53,9 @@ export default function Viewer() {
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
       socket.emit('join-room', roomId, id, username); 
+      // ✅ Fetch Room Data (Host Name)
+      socket.emit('get-room-data', roomId);
+      // Handshake
       socket.emit('request-sync', roomId);
       
       retryInterval.current = setInterval(() => {
@@ -82,6 +85,11 @@ export default function Viewer() {
         setMessages((prev) => [...prev, { ...data, isMe: false }]);
     };
     socket.on('receive-message', handleMessage);
+
+    // ✅ Listen for Room Data Response
+    socket.on('room-data-response', (data) => {
+        if(data.hostName) setHostName(data.hostName);
+    });
 
     socket.on('host-name-update', (name) => {
         setHostName(name);
@@ -146,6 +154,7 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
+      socket.off('room-data-response');
       socket.off('host-name-update');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
@@ -234,7 +243,8 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {isMuted && !isEnded && (
+            {/* ✅ UNMUTE BUTTON (Only if Muted AND Live) */}
+            {isMuted && status === 'LIVE' && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
                 </button>
