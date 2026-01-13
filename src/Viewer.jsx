@@ -20,7 +20,8 @@ export default function Viewer() {
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [hostName, setHostName] = useState("Party"); // Default
+  const [hostName, setHostName] = useState("Party");
+  // Audio
   const [isMuted, setIsMuted] = useState(true);
   const [showUnmuteBtn, setShowUnmuteBtn] = useState(false);
   
@@ -28,6 +29,7 @@ export default function Viewer() {
   const myPeer = useRef();
   const nameInputRef = useRef();
   const retryInterval = useRef(null);
+  const receivingCall = useRef(false);
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
   const isWatching = useRef(false);
@@ -43,14 +45,6 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ JOIN SOCKET IMMEDIATELY (Loads Chat/Name/Count)
-    socket.emit('join-room', { roomId, userId: null, username }, (response) => {
-        if(response && response.hostName) setHostName(response.hostName);
-    });
-    
-    socket.emit('request-sync', roomId);
-
-    // Setup Video
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -60,17 +54,18 @@ export default function Viewer() {
     
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
-      // Now tell server we are ready for video
-      socket.emit('ready-for-video', { roomId, peerId: id });
+      socket.emit('join-room', roomId, id, username); 
+      // Ask for Sync
+      socket.emit('request-sync', roomId);
       
-      // Retry in case host missed it
       retryInterval.current = setInterval(() => {
-          socket.emit('ready-for-video', { roomId, peerId: id });
+          if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
       }, 3000);
     });
 
     myPeer.current.on('call', (call) => {
-      // Stop retrying once called
+      if (receivingCall.current) return;
+      receivingCall.current = true;
       clearInterval(retryInterval.current);
       setIsEnded(false); 
 
@@ -96,7 +91,7 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // Fallback Host Name
+    // ✅ Host Name
     socket.on('host-name-update', (name) => {
         if(name) setHostName(name);
     });
@@ -109,7 +104,8 @@ export default function Viewer() {
 
     socket.on('stream-forced-refresh', () => {
         setIsEnded(false);
-        if(myPeer.current) socket.emit('ready-for-video', { roomId, peerId: myPeer.current.id });
+        receivingCall.current = false;
+        if(myPeer.current) socket.emit('join-room', roomId, myPeer.current.id, username);
     });
 
     socket.on('video-sync', (data) => {
@@ -148,6 +144,7 @@ export default function Viewer() {
         setIsEnded(true);
         setStatus("Host Disconnected");
         isWatching.current = false; 
+        receivingCall.current = false;
         if(videoRef.current) videoRef.current.srcObject = null;
     });
 
@@ -225,12 +222,13 @@ export default function Viewer() {
     <div className="flex flex-col h-screen w-screen bg-black overflow-hidden font-sans">
       <div className="h-16 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md border-b border-white/5 shrink-0 z-20">
          <div className="flex items-center gap-6">
+             {/* ✅ PartyTime Logo */}
              <Link to="/" className="flex items-center gap-3 group"><div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center font-bold text-white group-hover:scale-110 transition">P</div><h1 className="text-lg font-bold tracking-tight text-zinc-200 group-hover:text-white transition">Party<span className="text-violet-500">Time</span></h1></Link>
              <div className="h-6 w-px bg-white/10 hidden md:block"></div>
+             {/* ✅ Correct Host Name */}
              <div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div>
          </div>
          <div className="flex items-center gap-3">
-             {/* ✅ CHAT ALWAYS VISIBLE */}
              {!showChat && !isEnded && <button onClick={() => setShowChat(true)} className="text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white px-3 py-1.5 rounded-full border border-white/10 transition flex items-center gap-2"><span>💬</span> Chat</button>}
              <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
                  <div className={`w-2 h-2 rounded-full ${getStatusColor()}`}></div>
@@ -248,7 +246,7 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {/* ✅ UNMUTE BUTTON (Only appears if audio blocked) */}
+            {/* ✅ Unmute Button */}
             {showUnmuteBtn && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
@@ -257,7 +255,6 @@ export default function Viewer() {
             {isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950"><div className="text-center p-12 border border-zinc-800 rounded-3xl bg-black shadow-2xl"><div className="text-6xl mb-6 grayscale opacity-50">📺</div><h1 className="text-2xl font-bold text-zinc-300 mb-2">Host Offline</h1><p className="text-zinc-600">Waiting for signal...</p></div></div>}
           </div>
         </div>
-        {/* ✅ CHAT RENDERED UNCONDITIONALLY */}
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
     </div>
