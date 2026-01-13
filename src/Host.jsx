@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import Peer from 'peerjs';
 import io from 'socket.io-client';
+// ✅ NEW: Import WebTorrent
+import WebTorrent from 'webtorrent';
 import Chat from './Chat';
 
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
@@ -18,13 +20,13 @@ export default function Host() {
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [showUserPanel, setShowUserPanel] = useState(false);
-  const [mediaReady, setMediaReady] = useState(false); // Renamed from fileSelected
+  const [mediaReady, setMediaReady] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [showChat, setShowChat] = useState(true);
   const [inviteCopied, setInviteCopied] = useState(false);
   
-  // ✅ NEW: Source Selection State
-  const [sourceType, setSourceType] = useState('FILE'); // 'FILE' or 'URL'
+  // ✅ Source Selection State
+  const [sourceType, setSourceType] = useState('FILE'); // 'FILE', 'URL', 'MAGNET'
   const [urlInput, setUrlInput] = useState("");
 
   const videoRef = useRef();
@@ -32,9 +34,16 @@ export default function Host() {
   const streamRef = useRef(null);
   const nameInputRef = useRef();
   const calledPeers = useRef({});
+  const torrentClient = useRef(null); // ✅ Ref for Torrent Client
 
   useEffect(() => {
     document.title = "Host | PartyTime";
+    // ✅ Initialize WebTorrent Client
+    torrentClient.current = new WebTorrent();
+
+    return () => {
+        if(torrentClient.current) torrentClient.current.destroy();
+    }
   }, []);
 
   useEffect(() => {
@@ -127,7 +136,6 @@ export default function Host() {
     if (file) {
       const url = URL.createObjectURL(file);
       setMediaReady(true);
-      // Small timeout to allow DOM to update
       setTimeout(() => { 
           if(videoRef.current) { 
               videoRef.current.src = url; 
@@ -137,14 +145,42 @@ export default function Host() {
     }
   };
 
-  // ✅ NEW: Handle URL Loading
   const handleUrlLoad = (e) => {
       e.preventDefault();
       if(urlInput.trim() && videoRef.current) {
-          videoRef.current.src = urlInput;
-          setMediaReady(true);
-          setStatus("Ready");
+          // Check if it's a magnet link
+          if(urlInput.startsWith('magnet:')) {
+             handleMagnetLoad(urlInput);
+          } else {
+             videoRef.current.src = urlInput;
+             setMediaReady(true);
+             setStatus("Ready");
+          }
       }
+  };
+
+  // ✅ NEW: Handle Magnet Links
+  const handleMagnetLoad = (magnetURI) => {
+      setStatus("Downloading Metadata...");
+      torrentClient.current.add(magnetURI, (torrent) => {
+          setStatus("Torrent Found");
+          // Find the largest file (usually the movie)
+          const file = torrent.files.find(f => f.name.endsWith('.mp4') || f.name.endsWith('.webm') || f.name.endsWith('.mkv'));
+          
+          if(file) {
+              setStatus("Buffering...");
+              // Render the file to the video element
+              file.renderTo(videoRef.current, {
+                  autoplay: false
+              }, () => {
+                  setMediaReady(true);
+                  setStatus("Ready");
+              });
+          } else {
+              alert("No playable video found in this torrent.");
+              setStatus("Error");
+          }
+      });
   };
 
   const handleShare = () => {
@@ -160,7 +196,6 @@ export default function Host() {
         video.muted = false;
         let stream;
         
-        // Try captureStream (Standard) or mozCaptureStream (Firefox)
         if (video.captureStream) stream = video.captureStream(30);
         else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
         else throw new Error("Browser not supported. Use Chrome or Firefox.");
@@ -173,7 +208,7 @@ export default function Host() {
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { 
-        alert("Broadcast Error: " + err.message + "\n\nNote: If using a URL, the server must allow CORS (Access-Control-Allow-Origin)."); 
+        alert("Broadcast Error: " + err.message); 
     }
   };
 
@@ -195,7 +230,7 @@ export default function Host() {
 
   const getDotColor = () => {
       if (status === 'LIVE') return 'bg-green-500 animate-pulse';
-      if (status === 'PAUSED') return 'bg-yellow-500';
+      if (status === 'PAUSED' || status === 'Buffering...') return 'bg-yellow-500';
       return 'bg-zinc-600';
   }
 
@@ -253,9 +288,8 @@ export default function Host() {
           )}
           <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden relative">
             {!mediaReady ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800/30 via-black to-black"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video to begin.</p></div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800/30 via-black to-black"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select file, link, or magnet.</p></div>
             ) : (
-                /* ✅ Added crossOrigin="anonymous" to allow streaming URLs */
                 <video ref={videoRef} crossOrigin="anonymous" controls className="w-full h-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
             )}
           </div>
@@ -266,12 +300,12 @@ export default function Host() {
       {/* ✅ NEW BOTTOM BAR WITH TOGGLES */}
       <div className="h-24 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
         
-        {/* Source Selector Container */}
-        <div className={`w-[450px] h-16 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center p-2 gap-2 shadow-lg transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`w-[550px] h-16 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center p-2 gap-2 shadow-lg transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Toggle Buttons */}
-            <div className="flex flex-col gap-1 pr-2 border-r border-white/5">
-                <button onClick={() => setSourceType('FILE')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'FILE' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Local</button>
-                <button onClick={() => setSourceType('URL')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'URL' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Link</button>
+            <div className="flex gap-1 pr-2 border-r border-white/5">
+                <button onClick={() => setSourceType('FILE')} className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'FILE' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Local</button>
+                <button onClick={() => setSourceType('URL')} className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'URL' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Link</button>
+                <button onClick={() => setSourceType('MAGNET')} className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'MAGNET' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Magnet</button>
             </div>
 
             {/* Input Area */}
@@ -287,7 +321,13 @@ export default function Host() {
                     </label>
                 ) : (
                     <form onSubmit={handleUrlLoad} className="flex items-center gap-2 w-full h-full pr-1">
-                        <input type="text" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="Paste Direct Video Link (.mp4)" className="flex-1 bg-black/50 border border-zinc-700 text-white text-sm px-3 py-2 rounded-xl focus:border-violet-500 outline-none" />
+                        <input 
+                            type="text" 
+                            value={urlInput} 
+                            onChange={(e) => setUrlInput(e.target.value)} 
+                            placeholder={sourceType === 'MAGNET' ? "Paste Magnet URI..." : "Paste Direct Video Link"} 
+                            className="flex-1 bg-black/50 border border-zinc-700 text-white text-sm px-3 py-2 rounded-xl focus:border-violet-500 outline-none" 
+                        />
                         <button type="submit" className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded-xl border border-white/10 text-xs font-bold transition">LOAD</button>
                     </form>
                 )}
