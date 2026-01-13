@@ -4,6 +4,7 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
+// ✅ Stable Connection Settings
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
     transports: ['polling', 'websocket'],
@@ -55,11 +56,11 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ Register as Host
+      // ✅ Register Immediately
       socket.emit('register-host', { roomId, username });
     });
 
-    // ✅ Re-Register on reconnect (Fixes "0 Viewers" bug)
+    // Redundant registration on socket connect
     socket.on('connect', () => {
         socket.emit('register-host', { roomId, username });
     });
@@ -145,8 +146,7 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("LIVE"); 
         
-        // Register again to be sure
-        socket.emit('register-host', { roomId, username });
+        socket.emit('host-started-stream', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
