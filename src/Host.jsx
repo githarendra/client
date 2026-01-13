@@ -4,7 +4,7 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ CRITICAL: Match Server Transports to fix EIO=4
+// ✅ Fix Connection Stability
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
     transports: ['polling', 'websocket'],
@@ -16,7 +16,7 @@ export default function Host() {
   const [username, setUsername] = useState(""); 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Offline");
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState([]); // ✅ Holds Viewer Data
   const [messages, setMessages] = useState([]);
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [fileSelected, setFileSelected] = useState(false);
@@ -56,12 +56,18 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ Register immediately to "claim" the room for Viewer Count
+      // ✅ Register immediately so we get Viewer Counts
       socket.emit('register-host', { roomId, username });
     });
 
-    // ✅ Listener for Viewer Count/Details
+    // ✅ Re-Register on Socket Connect (Fixes the "0 Viewers" bug)
+    socket.on('connect', () => {
+        socket.emit('register-host', { roomId, username });
+    });
+
+    // ✅ Update Viewer Count
     socket.on('update-user-list', (updatedUsers) => {
+        console.log("Users updated:", updatedUsers);
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
     
@@ -70,6 +76,7 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
+    // Sync Reply
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
@@ -93,6 +100,7 @@ export default function Host() {
         socket.off('update-user-list');
         socket.off('receive-message');
         socket.off('request-sync-from-host');
+        socket.off('connect');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
@@ -141,7 +149,6 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("LIVE"); 
         
-        // Re-confirm details on broadcast start
         socket.emit('host-started-stream', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
