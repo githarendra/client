@@ -45,7 +45,7 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
-    // ✅ REGISTER SOCKET IMMEDIATELY
+    // ✅ REGISTER IMMEDIATELY (Fixes Viewer Count)
     socket.emit('register-host', { roomId, username });
 
     myPeer.current = new Peer(undefined, {
@@ -57,11 +57,11 @@ export default function Host() {
 
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
-      // Re-confirm registration
+      // Re-register to be safe
       socket.emit('register-host', { roomId, username });
     });
 
-    // ✅ LISTEN FOR UPDATES
+    // ✅ LISTEN FOR VIEWERS
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
