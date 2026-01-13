@@ -4,10 +4,9 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ WEBSOCKET ONLY (Stable on Render)
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
-    withCredentials: true, 
-    transports: ['websocket'],
+    withCredentials: true,
+    transports: ['polling', 'websocket'],
     autoConnect: true 
 });
 
@@ -16,10 +15,7 @@ export default function Host() {
   const [username, setUsername] = useState(""); 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Offline");
-  
-  // ✅ Just a number now (More reliable)
-  const [viewerCount, setViewerCount] = useState(0);
-  
+  const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [fileSelected, setFileSelected] = useState(false);
@@ -58,18 +54,13 @@ export default function Host() {
 
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
-      socket.emit('join-room', { roomId, username });
+      socket.emit('join-room', roomId, id, username);
+      // ✅ Register Immediately
       socket.emit('register-host', { roomId, username });
     });
 
-    // Re-register if socket reconnects
-    socket.on('connect', () => {
-        socket.emit('register-host', { roomId, username });
-    });
-
-    // ✅ COUNT UPDATE
-    socket.on('viewer-count-update', (count) => {
-        setViewerCount(count);
+    socket.on('update-user-list', (updatedUsers) => {
+        setUsers(updatedUsers.filter(u => u.username !== username));
     });
     
     const handleMessage = (data) => {
@@ -77,6 +68,7 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
+    // Sync Reply
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
@@ -97,10 +89,9 @@ export default function Host() {
 
     return () => {
         socket.off('user-connected');
-        socket.off('viewer-count-update');
+        socket.off('update-user-list');
         socket.off('receive-message');
         socket.off('request-sync-from-host');
-        socket.off('connect');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
@@ -114,6 +105,10 @@ export default function Host() {
               setTimeout(() => { calledPeers.current[userId] = false; }, 2000); 
           } catch(err) { calledPeers.current[userId] = false; }
       }, 500); 
+  };
+
+  const handleKick = (socketId, userName) => {
+      if(window.confirm(`Kick ${userName}?`)) socket.emit('kick-user', { roomId, socketId });
   };
 
   const handleFileChange = (e) => {
@@ -145,7 +140,7 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("LIVE"); 
         
-        socket.emit('host-started-stream', { roomId, username });
+        socket.emit('register-host', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
@@ -194,7 +189,7 @@ export default function Host() {
         <div className="flex items-center gap-6"><Link to="/" className="flex items-center gap-3 group"><div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center font-bold text-white group-hover:scale-110 transition">P</div><h1 className="text-lg font-bold tracking-tight text-zinc-200 group-hover:text-white transition">Party<span className="text-violet-500">Time</span></h1></Link><div className="h-6 w-px bg-white/10 hidden md:block"></div><div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Room ID</span><span className="text-sm font-mono text-zinc-300 leading-none">{roomId}</span></div></div>
         <div className="flex gap-3 items-center">
             <button onClick={handleShare} className={`flex items-center gap-2 px-4 py-1.5 rounded-full border transition font-bold text-sm ${inviteCopied ? 'bg-green-500/10 border-green-500/50 text-green-400' : 'bg-zinc-900 hover:bg-zinc-800 border-white/10 text-zinc-300'}`}><span>{inviteCopied ? '✅' : '🔗'}</span><span>{inviteCopied ? 'Copied!' : 'Share'}</span></button>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-full transition"><span className="text-sm">👥 {viewerCount}</span></div>
+            <button onClick={() => setShowUserPanel(!showUserPanel)} className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-white/10 rounded-full transition"><span className="text-sm">👥 {users.length}</span></button>
             <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full ${getDotColor()}`}></div>
                 <span className="text-xs font-bold uppercase text-zinc-400">{status}</span>
@@ -204,6 +199,27 @@ export default function Host() {
       </div>
       <div className="flex-1 min-h-0 flex flex-row relative overflow-hidden bg-black/90">
         <div className="flex-1 flex flex-col relative min-w-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-100">
+          {showUserPanel && (
+            <div className="absolute top-4 right-4 z-50 w-72 bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[70%] animate-in fade-in zoom-in-95 duration-200">
+                <div className="p-4 border-b border-white/10 flex justify-between items-center"><h3 className="font-bold text-white text-sm">Viewers ({users.length})</h3><button onClick={() => setShowUserPanel(false)} className="text-zinc-500 hover:text-white transition">✕</button></div>
+                <div className="overflow-y-auto flex-1 p-2 space-y-1">
+                    {users.map(u => (
+                        <div key={u.socketId} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 transition group">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div>
+                                <div className="flex flex-col">
+                                    <span className="font-bold text-sm text-zinc-200">{u.username}</span>
+                                    <span className={`text-[10px] font-bold uppercase ${u.status === 'LIVE' ? 'text-green-500' : 'text-yellow-500'}`}>
+                                        {u.status === 'LIVE' ? '▶ Watching' : '⏸ Paused'}
+                                    </span>
+                                </div>
+                            </div>
+                            <button onClick={() => handleKick(u.socketId, u.username)} className="text-xs text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 px-2 py-1 rounded transition">Kick</button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+          )}
           <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden relative">
             {!fileSelected ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800/30 via-black to-black"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video file to begin.</p></div>
