@@ -5,8 +5,8 @@ import io from 'socket.io-client';
 import Chat from './Chat';
 
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
-    withCredentials: true,
-    transports: ['polling', 'websocket'], 
+    withCredentials: true, 
+    transports: ['polling', 'websocket'],
     autoConnect: true 
 });
 
@@ -29,6 +29,15 @@ export default function Host() {
   const nameInputRef = useRef();
   const calledPeers = useRef({});
 
+  // ✅ DYNAMIC TITLE
+  useEffect(() => {
+    if (isLoggedIn && username) {
+      document.title = `🔴 Hosting: ${username}`;
+    } else {
+      document.title = "Host a Party - PartyTime";
+    }
+  }, [isLoggedIn, username]);
+
   useEffect(() => {
       return () => {
           socket.emit('leave-room');
@@ -45,6 +54,9 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ REGISTER SOCKET FIRST
+    socket.emit('register-host', { roomId, username });
+
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -54,12 +66,11 @@ export default function Host() {
 
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
-      socket.emit('join-room', roomId, id, username);
-      // ✅ Register Host Name immediately so server knows
-      socket.emit('host-joined', { roomId, username });
+      // Re-register to be safe
+      socket.emit('register-host', { roomId, username });
     });
 
-    // ✅ Listen for Viewer Updates (Count & Status)
+    // ✅ LISTEN FOR UPDATES
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
@@ -72,10 +83,11 @@ export default function Host() {
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
-            socket.emit('host-sync-data', { 
-                targetSocketId: requesterId,
+            socket.emit('video-sync', { 
+                roomId, 
+                type: state, 
                 time: videoRef.current.currentTime,
-                state: state
+                targetSocketId: requesterId 
             });
         }
     });
@@ -106,11 +118,8 @@ export default function Host() {
       }, 500); 
   };
 
-  // ✅ KICK FUNCTION
   const handleKick = (socketId, userName) => {
-      if(window.confirm(`Kick ${userName}?`)) {
-          socket.emit('kick-user', { roomId, socketId });
-      }
+      if(window.confirm(`Kick ${userName}?`)) socket.emit('kick-user', { roomId, socketId });
   };
 
   const handleFileChange = (e) => {
@@ -136,13 +145,13 @@ export default function Host() {
         let stream;
         if (video.captureStream) stream = video.captureStream(30);
         else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
-        else throw new Error("Browser not supported. Use Chrome or Firefox.");
+        else throw new Error("Browser not supported.");
         
         streamRef.current = stream; 
         setIsBroadcasting(true); 
         setStatus("LIVE"); 
         
-        socket.emit('host-joined', { roomId, username });
+        socket.emit('register-host', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
@@ -211,13 +220,11 @@ export default function Host() {
                                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 flex items-center justify-center text-xs font-bold">{u.username[0]}</div>
                                 <div className="flex flex-col">
                                     <span className="font-bold text-sm text-zinc-200">{u.username}</span>
-                                    {/* ✅ SHOW USER STATUS */}
                                     <span className={`text-[10px] font-bold uppercase ${u.status === 'LIVE' ? 'text-green-500' : 'text-yellow-500'}`}>
                                         {u.status === 'LIVE' ? '▶ Watching' : '⏸ Paused'}
                                     </span>
                                 </div>
                             </div>
-                            {/* ✅ KICK BUTTON */}
                             <button onClick={() => handleKick(u.socketId, u.username)} className="text-xs text-red-400 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 px-2 py-1 rounded transition">Kick</button>
                         </div>
                     ))}
