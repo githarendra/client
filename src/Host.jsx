@@ -4,10 +4,9 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ Fix Connection Stability
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
-    transports: ['polling', 'websocket'], // Important for Render
+    transports: ['polling', 'websocket'],
     autoConnect: true 
 });
 
@@ -16,7 +15,10 @@ export default function Host() {
   const [username, setUsername] = useState(""); 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Offline");
+  
+  // ✅ USERS STATE
   const [users, setUsers] = useState([]);
+  
   const [messages, setMessages] = useState([]);
   const [showUserPanel, setShowUserPanel] = useState(false);
   const [fileSelected, setFileSelected] = useState(false);
@@ -53,14 +55,21 @@ export default function Host() {
       path: '/peerjs' 
     });
 
+    // 1. PeerJS Open -> Register
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ Register Immediately
       socket.emit('register-host', { roomId, username });
     });
 
+    // 2. Socket Connect -> Register (Redundant safety)
+    socket.on('connect', () => {
+        socket.emit('register-host', { roomId, username });
+    });
+
+    // ✅ 3. LISTEN FOR USER UPDATES
     socket.on('update-user-list', (updatedUsers) => {
+        console.log("👥 Users Updated:", updatedUsers);
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
     
@@ -69,6 +78,7 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
+    // Sync Reply
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
@@ -84,6 +94,10 @@ export default function Host() {
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
+          if(videoRef.current) {
+              const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
+              socket.emit('video-sync', { roomId, type: state, time: videoRef.current.currentTime });
+          }
       }
     });
 
@@ -92,6 +106,7 @@ export default function Host() {
         socket.off('update-user-list');
         socket.off('receive-message');
         socket.off('request-sync-from-host');
+        socket.off('connect');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
@@ -134,7 +149,7 @@ export default function Host() {
         let stream;
         if (video.captureStream) stream = video.captureStream(30);
         else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
-        else throw new Error("Browser not supported. Use Chrome or Firefox.");
+        else throw new Error("Browser not supported.");
         
         streamRef.current = stream; 
         setIsBroadcasting(true); 
