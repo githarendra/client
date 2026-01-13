@@ -52,16 +52,11 @@ export default function Host() {
       path: '/peerjs' 
     });
 
-    // Register on Peer Open
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      socket.emit('register-host', { roomId, username });
-    });
-
-    // Register on Socket Connect (Redundancy)
-    socket.on('connect', () => {
-        socket.emit('register-host', { roomId, username });
+      // ✅ OLD WORKING REGISTRATION
+      socket.emit('host-joined', { roomId, username });
     });
 
     socket.on('update-user-list', (updatedUsers) => {
@@ -73,7 +68,8 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
-    socket.on('request-sync-from-host', (requesterId) => {
+    // ✅ 1. Reply with Sync Data
+    socket.on('ask-sync-data', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
             socket.emit('video-sync', { 
@@ -83,6 +79,11 @@ export default function Host() {
                 targetSocketId: requesterId 
             });
         }
+    });
+
+    // ✅ 2. Reply with Host Name
+    socket.on('ask-host-name', (requesterId) => {
+        socket.emit('return-host-name', { targetSocketId: requesterId, name: username });
     });
 
     socket.on('user-connected', (userId) => {
@@ -95,8 +96,8 @@ export default function Host() {
         socket.off('user-connected');
         socket.off('update-user-list');
         socket.off('receive-message');
-        socket.off('request-sync-from-host');
-        socket.off('connect');
+        socket.off('ask-sync-data');
+        socket.off('ask-host-name');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
@@ -145,7 +146,7 @@ export default function Host() {
         setIsBroadcasting(true); 
         setStatus("LIVE"); 
         
-        socket.emit('host-started-stream', { roomId, username });
+        socket.emit('host-joined', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
