@@ -148,18 +148,28 @@ useEffect(() => {
     }
   };
 
-  const handleUrlLoad = (e) => {
+const handleUrlLoad = (e) => {
       e.preventDefault();
-      if(urlInput.trim() && videoRef.current) {
-          // Check if it's a magnet link
-          if(urlInput.startsWith('magnet:')) {
-             handleMagnetLoad(urlInput);
+      if(!urlInput.trim()) return;
+
+      // 1. Switch the UI to show the video player immediately
+      setMediaReady(true);
+
+      // 2. Wait 100ms for the <video> tag to actually appear in the DOM
+      setTimeout(() => {
+          if (videoRef.current) {
+              // Now it's safe to set the source
+              if(urlInput.startsWith('magnet:')) {
+                 handleMagnetLoad(urlInput);
+              } else {
+                 videoRef.current.src = urlInput;
+                 setStatus("Ready");
+              }
           } else {
-             videoRef.current.src = urlInput;
-             setMediaReady(true);
-             setStatus("Ready");
+              // Fallback if something weird happens
+              alert("Video player failed to load. Please try clicking Load again.");
           }
-      }
+      }, 100);
   };
 
   // ✅ NEW: Handle Magnet Links
@@ -346,4 +356,5 @@ useEffect(() => {
     </div>
   );
 }
+
 
