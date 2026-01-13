@@ -45,6 +45,13 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ JOIN SOCKET IMMEDIATELY (Fixes "Waiting" Bug)
+    socket.emit('join-room', { roomId, userId: null, username }, (response) => {
+        if(response && response.hostName) setHostName(response.hostName);
+    });
+    
+    socket.emit('request-sync', roomId);
+
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -54,15 +61,8 @@ export default function Viewer() {
     
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
-      
-      // ✅ JOIN ROOM WITH CALLBACK (Fixes Name)
-      socket.emit('join-room', { roomId, userId: id, username }, (response) => {
-          if (response && response.hostName) {
-              setHostName(response.hostName);
-          }
-      });
-      
-      socket.emit('request-sync', roomId);
+      // Now we have an ID, update the server
+      socket.emit('join-room', { roomId, userId: id, username });
       
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) socket.emit('join-room', { roomId, userId: id, username }); 
@@ -82,7 +82,6 @@ export default function Viewer() {
             videoRef.current.muted = true;
             setIsMuted(true);
             
-            // ✅ AUTO-PLAY LOGIC
             videoRef.current.play()
             .then(() => {
                 setShowUnmuteBtn(true);
@@ -98,8 +97,8 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // Fallback Listener for Host Name
-    socket.on('host-name', (name) => {
+    // Host Name
+    socket.on('host-name-update', (name) => {
         if(name) setHostName(name);
     });
 
@@ -162,7 +161,7 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
-      socket.off('host-name');
+      socket.off('host-name-update');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -234,6 +233,7 @@ export default function Viewer() {
              <div className="flex flex-col"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Watching</span><span className="text-sm font-mono text-white leading-none">{hostName}'s Room</span></div>
          </div>
          <div className="flex items-center gap-3">
+             {/* ✅ Chat Button (Always Visible) */}
              {!showChat && !isEnded && <button onClick={() => setShowChat(true)} className="text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white px-3 py-1.5 rounded-full border border-white/10 transition flex items-center gap-2"><span>💬</span> Chat</button>}
              <div className="px-3 py-1.5 bg-black/40 border border-white/5 rounded-full flex items-center gap-2">
                  <div className={`w-2 h-2 rounded-full ${getStatusColor()}`}></div>
@@ -251,7 +251,7 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {/* ✅ UNMUTE BUTTON (Only shows if needed) */}
+            {/* ✅ UNMUTE BUTTON (Appears only when needed) */}
             {showUnmuteBtn && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
@@ -260,6 +260,7 @@ export default function Viewer() {
             {isEnded && <div className="absolute inset-0 z-[100] flex items-center justify-center bg-zinc-950"><div className="text-center p-12 border border-zinc-800 rounded-3xl bg-black shadow-2xl"><div className="text-6xl mb-6 grayscale opacity-50">📺</div><h1 className="text-2xl font-bold text-zinc-300 mb-2">Host Offline</h1><p className="text-zinc-600">Waiting for signal...</p></div></div>}
           </div>
         </div>
+        {/* ✅ CHAT (Ensured Visible) */}
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
     </div>
