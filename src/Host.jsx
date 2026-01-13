@@ -18,18 +18,21 @@ export default function Host() {
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [showUserPanel, setShowUserPanel] = useState(false);
-  const [fileSelected, setFileSelected] = useState(false);
+  const [mediaReady, setMediaReady] = useState(false); // Renamed from fileSelected
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [showChat, setShowChat] = useState(true);
   const [inviteCopied, setInviteCopied] = useState(false);
   
+  // ✅ NEW: Source Selection State
+  const [sourceType, setSourceType] = useState('FILE'); // 'FILE' or 'URL'
+  const [urlInput, setUrlInput] = useState("");
+
   const videoRef = useRef();
   const myPeer = useRef();
   const streamRef = useRef(null);
   const nameInputRef = useRef();
   const calledPeers = useRef({});
 
-  // ✅ Initial Title
   useEffect(() => {
     document.title = "Host | PartyTime";
   }, []);
@@ -47,7 +50,6 @@ export default function Host() {
       if(name.trim()) { 
           setUsername(name); 
           setIsLoggedIn(true); 
-          // ✅ Title: Hosting as Harry
           document.title = `Hosting as ${name} | PartyTime`;
       }
   };
@@ -124,9 +126,25 @@ export default function Host() {
     const file = e.target.files[0];
     if (file) {
       const url = URL.createObjectURL(file);
-      setFileSelected(true);
-      setTimeout(() => { if(videoRef.current) { videoRef.current.src = url; setStatus("Ready"); }}, 50);
+      setMediaReady(true);
+      // Small timeout to allow DOM to update
+      setTimeout(() => { 
+          if(videoRef.current) { 
+              videoRef.current.src = url; 
+              setStatus("Ready"); 
+          }
+      }, 50);
     }
+  };
+
+  // ✅ NEW: Handle URL Loading
+  const handleUrlLoad = (e) => {
+      e.preventDefault();
+      if(urlInput.trim() && videoRef.current) {
+          videoRef.current.src = urlInput;
+          setMediaReady(true);
+          setStatus("Ready");
+      }
   };
 
   const handleShare = () => {
@@ -141,6 +159,8 @@ export default function Host() {
     try { 
         video.muted = false;
         let stream;
+        
+        // Try captureStream (Standard) or mozCaptureStream (Firefox)
         if (video.captureStream) stream = video.captureStream(30);
         else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
         else throw new Error("Browser not supported. Use Chrome or Firefox.");
@@ -152,7 +172,9 @@ export default function Host() {
         socket.emit('host-joined', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
-    } catch (err) { alert(err.message); }
+    } catch (err) { 
+        alert("Broadcast Error: " + err.message + "\n\nNote: If using a URL, the server must allow CORS (Access-Control-Allow-Origin)."); 
+    }
   };
 
   const stopBroadcast = () => {
@@ -230,23 +252,52 @@ export default function Host() {
             </div>
           )}
           <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden relative">
-            {!fileSelected ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800/30 via-black to-black"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video file to begin.</p></div>
+            {!mediaReady ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800/30 via-black to-black"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select a video to begin.</p></div>
             ) : (
-                <video ref={videoRef} controls className="w-full h-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
+                /* ✅ Added crossOrigin="anonymous" to allow streaming URLs */
+                <video ref={videoRef} crossOrigin="anonymous" controls className="w-full h-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
             )}
           </div>
         </div>
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
+      
+      {/* ✅ NEW BOTTOM BAR WITH TOGGLES */}
       <div className="h-24 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
-        <label className={`cursor-pointer group flex items-center justify-center gap-3 w-80 h-16 bg-zinc-900 border border-zinc-800 rounded-2xl hover:bg-zinc-800 hover:border-zinc-700 transition shadow-lg ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
-            <span className="text-2xl group-hover:scale-110 transition">📂</span><div className="flex flex-col items-start"><span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Source Media</span><span className="text-sm font-bold text-white truncate max-w-[150px]">{fileSelected ? "Video Loaded" : "Select File"}</span></div><input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
-        </label>
+        
+        {/* Source Selector Container */}
+        <div className={`w-[450px] h-16 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center p-2 gap-2 shadow-lg transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
+            {/* Toggle Buttons */}
+            <div className="flex flex-col gap-1 pr-2 border-r border-white/5">
+                <button onClick={() => setSourceType('FILE')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'FILE' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Local</button>
+                <button onClick={() => setSourceType('URL')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'URL' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Link</button>
+            </div>
+
+            {/* Input Area */}
+            <div className="flex-1 h-full relative">
+                {sourceType === 'FILE' ? (
+                    <label className="cursor-pointer flex items-center justify-center gap-3 w-full h-full hover:bg-zinc-800 rounded-xl transition group">
+                        <span className="text-xl group-hover:scale-110 transition">📂</span>
+                        <div className="flex flex-col items-start">
+                            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Local File</span>
+                            <span className="text-sm font-bold text-white truncate max-w-[200px]">{mediaReady && videoRef.current?.src.startsWith('blob') ? "File Loaded" : "Select File"}</span>
+                        </div>
+                        <input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
+                    </label>
+                ) : (
+                    <form onSubmit={handleUrlLoad} className="flex items-center gap-2 w-full h-full pr-1">
+                        <input type="text" value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="Paste Direct Video Link (.mp4)" className="flex-1 bg-black/50 border border-zinc-700 text-white text-sm px-3 py-2 rounded-xl focus:border-violet-500 outline-none" />
+                        <button type="submit" className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded-xl border border-white/10 text-xs font-bold transition">LOAD</button>
+                    </form>
+                )}
+            </div>
+        </div>
+
         {!isBroadcasting ? (
-            <button onClick={startBroadcast} disabled={!fileSelected} className={`w-80 h-16 rounded-2xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-3 ${fileSelected ? 'bg-violet-600 hover:bg-violet-500 text-white hover:scale-105 shadow-violet-900/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}><span className="text-xl">📡</span><div className="flex flex-col items-start"><span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">Action</span><span>Start Broadcast</span></div></button>
+            <button onClick={startBroadcast} disabled={!mediaReady} className={`w-64 h-16 rounded-2xl font-bold text-sm transition-all shadow-lg flex items-center justify-center gap-3 ${mediaReady ? 'bg-violet-600 hover:bg-violet-500 text-white hover:scale-105 shadow-violet-900/20' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}><span className="text-xl">📡</span><div className="flex flex-col items-start"><span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">Action</span><span>Start Broadcast</span></div></button>
         ) : (
-            <button onClick={stopBroadcast} className="w-80 h-16 rounded-2xl font-bold text-sm transition-all bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white flex items-center justify-center gap-3 animate-pulse"><span className="text-xl">⏹</span><div className="flex flex-col items-start"><span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">Live</span><span>Stop Broadcast</span></div></button>
+            <button onClick={stopBroadcast} className="w-64 h-16 rounded-2xl font-bold text-sm transition-all bg-red-500/10 text-red-500 border border-red-500/50 hover:bg-red-500 hover:text-white flex items-center justify-center gap-3 animate-pulse"><span className="text-xl">⏹</span><div className="flex flex-col items-start"><span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">Live</span><span>Stop Broadcast</span></div></button>
         )}
       </div>
     </div>
