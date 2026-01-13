@@ -23,8 +23,8 @@ export default function Host() {
   const [showChat, setShowChat] = useState(true);
   const [inviteCopied, setInviteCopied] = useState(false);
   
-  // ✅ Source Selection State
-  const [sourceType, setSourceType] = useState('FILE'); // 'FILE', 'URL', 'MAGNET'
+  // ✅ Clean Source Selection (File or Link)
+  const [sourceType, setSourceType] = useState('FILE'); 
   const [urlInput, setUrlInput] = useState("");
 
   const videoRef = useRef();
@@ -32,22 +32,10 @@ export default function Host() {
   const streamRef = useRef(null);
   const nameInputRef = useRef();
   const calledPeers = useRef({});
-  const torrentClient = useRef(null); // ✅ Ref for Torrent Client
 
-useEffect(() => {
+  useEffect(() => {
     document.title = "Host | PartyTime";
-
-    // ✅ CHANGE THIS LINE: Use window.WebTorrent
-    if (window.WebTorrent) {
-        torrentClient.current = new window.WebTorrent();
-    } else {
-        console.error("WebTorrent script not loaded!");
-    }
-
-    return () => {
-        if(torrentClient.current) torrentClient.current.destroy();
-    }
-}, []);
+  }, []);
 
   useEffect(() => {
       return () => {
@@ -148,52 +136,22 @@ useEffect(() => {
     }
   };
 
-const handleUrlLoad = (e) => {
+  const handleUrlLoad = (e) => {
       e.preventDefault();
       if(!urlInput.trim()) return;
 
-      // 1. Switch the UI to show the video player immediately
+      // 1. Force the video player to appear
       setMediaReady(true);
 
-      // 2. Wait 100ms for the <video> tag to actually appear in the DOM
+      // 2. Wait a moment for React to render the <video> tag
       setTimeout(() => {
           if (videoRef.current) {
-              // Now it's safe to set the source
-              if(urlInput.startsWith('magnet:')) {
-                 handleMagnetLoad(urlInput);
-              } else {
-                 videoRef.current.src = urlInput;
-                 setStatus("Ready");
-              }
+             videoRef.current.src = urlInput;
+             setStatus("Ready");
           } else {
-              // Fallback if something weird happens
-              alert("Video player failed to load. Please try clicking Load again.");
+             alert("Video player failed to load. Please try again.");
           }
       }, 100);
-  };
-
-  // ✅ NEW: Handle Magnet Links
-  const handleMagnetLoad = (magnetURI) => {
-      setStatus("Downloading Metadata...");
-      torrentClient.current.add(magnetURI, (torrent) => {
-          setStatus("Torrent Found");
-          // Find the largest file (usually the movie)
-          const file = torrent.files.find(f => f.name.endsWith('.mp4') || f.name.endsWith('.webm') || f.name.endsWith('.mkv'));
-          
-          if(file) {
-              setStatus("Buffering...");
-              // Render the file to the video element
-              file.renderTo(videoRef.current, {
-                  autoplay: false
-              }, () => {
-                  setMediaReady(true);
-                  setStatus("Ready");
-              });
-          } else {
-              alert("No playable video found in this torrent.");
-              setStatus("Error");
-          }
-      });
   };
 
   const handleShare = () => {
@@ -243,7 +201,7 @@ const handleUrlLoad = (e) => {
 
   const getDotColor = () => {
       if (status === 'LIVE') return 'bg-green-500 animate-pulse';
-      if (status === 'PAUSED' || status === 'Buffering...') return 'bg-yellow-500';
+      if (status === 'PAUSED') return 'bg-yellow-500';
       return 'bg-zinc-600';
   }
 
@@ -301,7 +259,7 @@ const handleUrlLoad = (e) => {
           )}
           <div className="flex-1 flex items-center justify-center bg-black w-full h-full overflow-hidden relative">
             {!mediaReady ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800/30 via-black to-black"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select file, link, or magnet.</p></div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800/30 via-black to-black"><div className="w-24 h-24 bg-zinc-900 rounded-3xl flex items-center justify-center mb-6 shadow-xl border border-white/5"><span className="text-6xl">🎬</span></div><h2 className="text-2xl font-bold text-white mb-2">Ready to Stream?</h2><p className="text-zinc-500">Select file or link.</p></div>
             ) : (
                 <video ref={videoRef} crossOrigin="anonymous" controls className="w-full h-full object-contain" onPause={() => handleSync('PAUSE')} onPlay={() => handleSync('PLAY')} />
             )}
@@ -310,15 +268,13 @@ const handleUrlLoad = (e) => {
         {showChat && <Chat socket={socket} roomId={roomId} toggleChat={() => setShowChat(false)} username={username} messages={messages} setMessages={setMessages} />}
       </div>
       
-      {/* ✅ NEW BOTTOM BAR WITH TOGGLES */}
       <div className="h-24 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
         
-        <div className={`w-[550px] h-16 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center p-2 gap-2 shadow-lg transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`w-[450px] h-16 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center p-2 gap-2 shadow-lg transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
             {/* Toggle Buttons */}
-            <div className="flex gap-1 pr-2 border-r border-white/5">
-                <button onClick={() => setSourceType('FILE')} className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'FILE' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Local</button>
-                <button onClick={() => setSourceType('URL')} className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'URL' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Link</button>
-                <button onClick={() => setSourceType('MAGNET')} className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'MAGNET' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Magnet</button>
+            <div className="flex flex-col gap-1 pr-2 border-r border-white/5">
+                <button onClick={() => setSourceType('FILE')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'FILE' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Local</button>
+                <button onClick={() => setSourceType('URL')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'URL' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Link</button>
             </div>
 
             {/* Input Area */}
@@ -338,7 +294,7 @@ const handleUrlLoad = (e) => {
                             type="text" 
                             value={urlInput} 
                             onChange={(e) => setUrlInput(e.target.value)} 
-                            placeholder={sourceType === 'MAGNET' ? "Paste Magnet URI..." : "Paste Direct Video Link"} 
+                            placeholder="Paste Direct Video Link (.mp4)" 
                             className="flex-1 bg-black/50 border border-zinc-700 text-white text-sm px-3 py-2 rounded-xl focus:border-violet-500 outline-none" 
                         />
                         <button type="submit" className="bg-zinc-800 hover:bg-zinc-700 text-white px-3 py-2 rounded-xl border border-white/10 text-xs font-bold transition">LOAD</button>
@@ -356,5 +312,3 @@ const handleUrlLoad = (e) => {
     </div>
   );
 }
-
-
