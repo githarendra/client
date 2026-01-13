@@ -4,10 +4,10 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ Stable Connection Settings
+// ✅ Fix Connection Error
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
-    withCredentials: true, 
-    transports: ['polling', 'websocket'],
+    withCredentials: true,
+    transports: ['polling', 'websocket'], 
     autoConnect: true 
 });
 
@@ -56,15 +56,11 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ Register Immediately
-      socket.emit('register-host', { roomId, username });
+      // ✅ Register Host Name
+      socket.emit('host-joined', { roomId, username });
     });
 
-    // Redundant registration on socket connect
-    socket.on('connect', () => {
-        socket.emit('register-host', { roomId, username });
-    });
-
+    // ✅ Listen for Viewer Updates
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
@@ -74,14 +70,14 @@ export default function Host() {
     };
     socket.on('receive-message', handleMessage);
     
+    // ✅ Handle Sync Request from Viewer
     socket.on('request-sync-from-host', (requesterId) => {
         if(videoRef.current) {
             const state = videoRef.current.paused ? 'PAUSE' : 'PLAY';
-            socket.emit('video-sync', { 
-                roomId, 
-                type: state, 
+            socket.emit('host-sync-data', { 
+                targetSocketId: requesterId,
                 time: videoRef.current.currentTime,
-                targetSocketId: requesterId 
+                state: state
             });
         }
     });
@@ -97,7 +93,6 @@ export default function Host() {
         socket.off('update-user-list');
         socket.off('receive-message');
         socket.off('request-sync-from-host');
-        socket.off('connect');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
@@ -140,13 +135,13 @@ export default function Host() {
         let stream;
         if (video.captureStream) stream = video.captureStream(30);
         else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
-        else throw new Error("Browser not supported.");
+        else throw new Error("Browser not supported. Use Chrome or Firefox.");
         
         streamRef.current = stream; 
         setIsBroadcasting(true); 
         setStatus("LIVE"); 
         
-        socket.emit('host-started-stream', { roomId, username });
+        socket.emit('host-joined', { roomId, username });
         socket.emit('video-sync', { roomId, type: 'PAUSE', time: video.currentTime });
 
     } catch (err) { alert(err.message); }
