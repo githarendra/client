@@ -219,7 +219,7 @@ export default function Viewer() {
               <form onSubmit={handleLogin} className="z-10 bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl border border-white/10 flex flex-col gap-6 w-96 shadow-2xl relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500"></div>
                   <div className="text-center"><div className="w-16 h-16 bg-violet-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎫</div><h1 className="text-3xl font-bold text-white tracking-tight mb-2">Join Party</h1><div className="bg-black/50 p-2 rounded-lg border border-white/5 inline-flex items-center gap-2 text-zinc-400 text-xs font-mono mt-2"><span>{roomId}</span></div></div>
-                  <div className="flex flex-col gap-2 text-left"><label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Name</label><input ref={nameInputRef} type="text" placeholder="e.g. Viewer Vinny" className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 outline-none transition" autoFocus /></div>
+                  <div className="flex flex-col gap-2 text-left"><label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Name</label><input ref={nameInputRef} type="text" placeholder="e.g. Viewer Harry" className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 outline-none transition" autoFocus /></div>
                   <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 rounded-xl transition-all hover:scale-[1.02] shadow-lg shadow-violet-900/20">Enter Cinema</button>
               </form>
           </div>
@@ -271,3 +271,4 @@ export default function Viewer() {
     </div>
   );
 }
+
