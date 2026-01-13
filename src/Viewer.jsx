@@ -21,7 +21,9 @@ export default function Viewer() {
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
   const [hostName, setHostName] = useState("Party");
+  // ✅ Muted State
   const [isMuted, setIsMuted] = useState(true);
+  const [showUnmuteBtn, setShowUnmuteBtn] = useState(false);
   
   const videoRef = useRef();
   const myPeer = useRef();
@@ -53,10 +55,10 @@ export default function Viewer() {
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
       socket.emit('join-room', roomId, id, username); 
-      // ✅ Fetch Room Data (Host Name)
-      socket.emit('get-room-data', roomId);
-      // Handshake
+      // 1. Ask for Sync
       socket.emit('request-sync', roomId);
+      // 2. Ask for Name
+      socket.emit('get-host-name', roomId);
       
       retryInterval.current = setInterval(() => {
           if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
@@ -75,8 +77,15 @@ export default function Viewer() {
             videoRef.current.srcObject = hostStream;
             videoRef.current.muted = true;
             setIsMuted(true);
-            videoRef.current.play().catch(e => console.log("Autoplay blocked"));
-            setStatus("Ready");
+            
+            // ✅ AUTO-PLAY LOGIC
+            videoRef.current.play()
+            .then(() => {
+                // If it plays muted successfully, show unmute button
+                setShowUnmuteBtn(true);
+                setStatus("Ready");
+            })
+            .catch(e => console.log("Autoplay blocked", e));
         }
       });
     });
@@ -86,12 +95,8 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // ✅ Listen for Room Data Response
-    socket.on('room-data-response', (data) => {
-        if(data.hostName) setHostName(data.hostName);
-    });
-
-    socket.on('host-name-update', (name) => {
+    // ✅ Host Name Response
+    socket.on('set-host-name', (name) => {
         setHostName(name);
     });
 
@@ -126,7 +131,7 @@ export default function Viewer() {
                     videoRef.current.play().catch(() => {
                         videoRef.current.muted = true;
                         videoRef.current.play();
-                        setIsMuted(true);
+                        setShowUnmuteBtn(true);
                     });
                     setStatus("LIVE");
                     socket.emit('viewer-status-update', { roomId, status: 'LIVE' });
@@ -154,8 +159,7 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
-      socket.off('room-data-response');
-      socket.off('host-name-update');
+      socket.off('set-host-name');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -180,6 +184,7 @@ export default function Viewer() {
       if (videoRef.current) {
           videoRef.current.muted = false;
           setIsMuted(false);
+          setShowUnmuteBtn(false);
       }
   };
 
@@ -243,8 +248,8 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {/* ✅ UNMUTE BUTTON (Only if Muted AND Live) */}
-            {isMuted && status === 'LIVE' && !isEnded && (
+            {/* ✅ UNMUTE BUTTON (Appears only when needed) */}
+            {showUnmuteBtn && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
                 </button>
