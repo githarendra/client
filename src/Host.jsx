@@ -4,6 +4,7 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
+// ✅ Stable Connection Settings
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
     transports: ['polling', 'websocket'],
@@ -55,11 +56,15 @@ export default function Host() {
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
       socket.emit('join-room', roomId, id, username);
-      // ✅ VITAL: Tell server we are the Host immediately
+      // ✅ Register Immediately
       socket.emit('register-host', { roomId, username });
     });
 
-    // ✅ LISTEN FOR VIEWER UPDATES
+    // Redundant registration on socket connect
+    socket.on('connect', () => {
+        socket.emit('register-host', { roomId, username });
+    });
+
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
@@ -81,7 +86,6 @@ export default function Host() {
         }
     });
 
-    // ✅ CALL NEW VIEWER
     socket.on('user-connected', (userId) => {
       if (streamRef.current) {
           connectToNewUser(userId, streamRef.current);
@@ -93,6 +97,7 @@ export default function Host() {
         socket.off('update-user-list');
         socket.off('receive-message');
         socket.off('request-sync-from-host');
+        socket.off('connect');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
