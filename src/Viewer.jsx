@@ -4,10 +4,9 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ WEBSOCKET ONLY
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
-    transports: ['websocket'],
+    transports: ['polling', 'websocket'],
     autoConnect: true 
 });
 
@@ -46,6 +45,11 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ JOIN SOCKET IMMEDIATELY (Prevents stuck screen)
+    // Send null ID first just to register presence
+    socket.emit('join-room', roomId, null, username);
+    socket.emit('request-sync', roomId);
+
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -55,18 +59,11 @@ export default function Viewer() {
     
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
-      
-      // ✅ JOIN & GET NAME VIA CALLBACK (Best Practice)
-      socket.emit('join-room', { roomId, username }, (response) => {
-          if (response && response.hostName) {
-              setHostName(response.hostName);
-          }
-      });
-      
-      socket.emit('request-sync', roomId);
+      // Re-send join with actual Peer ID so Host can call us
+      socket.emit('join-room', roomId, id, username); 
       
       retryInterval.current = setInterval(() => {
-          if(!receivingCall.current) socket.emit('join-room', { roomId, username }); 
+          if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
       }, 3000);
     });
 
@@ -83,6 +80,7 @@ export default function Viewer() {
             videoRef.current.muted = true;
             setIsMuted(true);
             
+            // ✅ AUTO-PLAY LOGIC
             videoRef.current.play()
             .then(() => {
                 setShowUnmuteBtn(true);
@@ -98,8 +96,8 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // Fallback name update
-    socket.on('host-name-update', (name) => {
+    // ✅ HOST NAME LISTENER
+    socket.on('host-name', (name) => {
         if(name) setHostName(name);
     });
 
@@ -112,7 +110,7 @@ export default function Viewer() {
     socket.on('stream-forced-refresh', () => {
         setIsEnded(false);
         receivingCall.current = false;
-        if(myPeer.current) socket.emit('join-room', { roomId, username });
+        if(myPeer.current) socket.emit('join-room', roomId, myPeer.current.id, username);
     });
 
     socket.on('video-sync', (data) => {
@@ -128,6 +126,7 @@ export default function Viewer() {
             if(data.type === 'PAUSE') {
                 videoRef.current.pause();
                 setStatus("Host Paused");
+                // ✅ UPDATE HOST STATUS
                 socket.emit('viewer-status-update', { roomId, status: 'PAUSE' });
             } else if(data.type === 'PLAY') {
                 if (!isLocallyPaused.current) {
@@ -162,7 +161,7 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
-      socket.off('host-name-update');
+      socket.off('host-name');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -251,6 +250,7 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
+            {/* ✅ UNMUTE BUTTON (Only appears if audio blocked) */}
             {showUnmuteBtn && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
