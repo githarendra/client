@@ -4,7 +4,6 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// ✅ Fix Connection Error
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true, 
     transports: ['polling', 'websocket'],
@@ -21,8 +20,7 @@ export default function Viewer() {
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [hostName, setHostName] = useState("Party"); // Default Name
-  
+  const [hostName, setHostName] = useState("Party");
   // ✅ Audio State
   const [isMuted, setIsMuted] = useState(true);
   const [showUnmuteBtn, setShowUnmuteBtn] = useState(false);
@@ -47,6 +45,10 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ 1. JOIN SOCKET ROOM FIRST (Viewer Count Logic)
+    socket.emit('join-room-viewer', { roomId, username });
+    socket.emit('request-sync', roomId);
+
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -56,13 +58,10 @@ export default function Viewer() {
     
     myPeer.current.on('open', (id) => {
       setStatus("Waiting for Host...");
-      socket.emit('join-room', roomId, id, username); 
-      // Handshake: Ask for sync
-      socket.emit('request-sync', roomId);
-      
+      // Also send signal here for redundancy
       retryInterval.current = setInterval(() => {
-          if(!receivingCall.current) socket.emit('join-room', roomId, id, username); 
-      }, 2000);
+          if(!receivingCall.current) socket.emit('join-room-viewer', { roomId, username });
+      }, 3000);
     });
 
     myPeer.current.on('call', (call) => {
@@ -70,6 +69,9 @@ export default function Viewer() {
       receivingCall.current = true;
       clearInterval(retryInterval.current);
       setIsEnded(false); 
+
+      // ✅ 2. CONNECT PEER (Video Logic)
+      socket.emit('user-connected-video', { roomId, userId: myPeer.current.id });
 
       call.answer(); 
       call.on('stream', (hostStream) => {
@@ -94,8 +96,8 @@ export default function Viewer() {
     };
     socket.on('receive-message', handleMessage);
 
-    // ✅ HOST NAME LISTENER
-    socket.on('host-name', (name) => {
+    // ✅ HOST NAME
+    socket.on('host-name-update', (name) => {
         setHostName(name);
     });
 
@@ -108,7 +110,7 @@ export default function Viewer() {
     socket.on('stream-forced-refresh', () => {
         setIsEnded(false);
         receivingCall.current = false;
-        if(myPeer.current) socket.emit('join-room', roomId, myPeer.current.id, username);
+        if(myPeer.current) socket.emit('user-connected-video', { roomId, userId: myPeer.current.id });
     });
 
     socket.on('video-sync', (data) => {
@@ -158,7 +160,7 @@ export default function Viewer() {
       socket.off('broadcast-stopped');
       socket.off('stream-forced-refresh');
       socket.off('receive-message', handleMessage);
-      socket.off('host-name');
+      socket.off('host-name-update');
       socket.off('kicked');
       if(myPeer.current) myPeer.current.destroy();
     };
@@ -247,7 +249,6 @@ export default function Viewer() {
                 onPause={onVideoPause} 
                 onPlay={onVideoPlay} 
             />
-            {/* ✅ UNMUTE BUTTON */}
             {showUnmuteBtn && !isEnded && (
                 <button onClick={unmuteVideo} className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-black/60 hover:bg-black/80 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-bold border border-white/10 flex items-center gap-2 transition animate-bounce shadow-xl">
                     <span>🔊</span> Click to Unmute
