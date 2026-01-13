@@ -5,7 +5,7 @@ import io from 'socket.io-client';
 import Chat from './Chat';
 
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
-    withCredentials: true, 
+    withCredentials: true,
     transports: ['polling', 'websocket'],
     autoConnect: true 
 });
@@ -45,6 +45,9 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ REGISTER SOCKET IMMEDIATELY
+    socket.emit('register-host', { roomId, username });
+
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
@@ -54,20 +57,15 @@ export default function Host() {
 
     myPeer.current.on('open', (id) => {
       setStatus("Connected");
+      // Re-confirm registration
       socket.emit('register-host', { roomId, username });
     });
 
-    // Re-register if socket reconnects
-    socket.on('connect', () => {
-        socket.emit('register-host', { roomId, username });
-    });
-
-    // ✅ Viewer Updates
+    // ✅ LISTEN FOR UPDATES
     socket.on('update-user-list', (updatedUsers) => {
         setUsers(updatedUsers.filter(u => u.username !== username));
     });
     
-    // ✅ Chat Updates
     const handleMessage = (data) => {
         setMessages((prev) => [...prev, { ...data, isMe: false }]);
     };
@@ -96,7 +94,6 @@ export default function Host() {
         socket.off('update-user-list');
         socket.off('receive-message');
         socket.off('request-sync-from-host');
-        socket.off('connect');
         if(myPeer.current) myPeer.current.destroy();
     }
   }, [isLoggedIn, roomId]);
