@@ -121,7 +121,34 @@ export default function Host() {
       }
   };
 
-  // ✅ UPDATED: Handle File Switch while Live
+  // ✅ NEW FUNCTION: Force-updates the stream for all connected users
+  const refreshStream = () => {
+      const video = videoRef.current;
+      if (!video || !isBroadcasting) return;
+
+      // 1. Capture the NEW video stream
+      let newStream;
+      if (video.captureStream) newStream = video.captureStream(30);
+      else if (video.mozCaptureStream) newStream = video.mozCaptureStream(30);
+
+      if (newStream) {
+          streamRef.current = newStream;
+          
+          // 2. Loop through all existing PeerJS connections and call them again
+          if(myPeer.current && myPeer.current.connections) {
+              Object.keys(myPeer.current.connections).forEach(peerId => {
+                  const connections = myPeer.current.connections[peerId];
+                  if(connections && connections.length > 0) {
+                      try {
+                        // Calling them again replaces their stream automatically
+                        myPeer.current.call(peerId, newStream);
+                      } catch(e) { console.log("Refresh failed for", peerId); }
+                  }
+              });
+          }
+      }
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -131,10 +158,11 @@ export default function Host() {
           if(videoRef.current) { 
               videoRef.current.src = url; 
               
-              // If Live, play immediately and notify server
               if(isBroadcasting) {
                   videoRef.current.play();
                   socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
+                  // ✅ REFRESH STREAM FOR VIEWERS
+                  setTimeout(() => refreshStream(), 500);
               } else {
                   setStatus("Ready"); 
               }
@@ -143,7 +171,6 @@ export default function Host() {
     }
   };
 
-  // ✅ UPDATED: Handle Link Switch while Live
   const handleUrlLoad = (e) => {
       e.preventDefault();
       if(!urlInput.trim()) return;
@@ -154,15 +181,16 @@ export default function Host() {
           if (videoRef.current) {
              videoRef.current.src = urlInput;
              
-             // If Live, play immediately and notify server
              if(isBroadcasting) {
                  videoRef.current.play();
                  socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
+                 // ✅ REFRESH STREAM FOR VIEWERS
+                 setTimeout(() => refreshStream(), 500);
              } else {
                  setStatus("Ready");
              }
           } else {
-             alert("Video player failed to load. Please try again.");
+             alert("Video player failed to load.");
           }
       }, 100);
   };
@@ -283,7 +311,6 @@ export default function Host() {
       
       <div className="h-24 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
         
-        {/* ✅ REMOVED 'opacity-50 pointer-events-none' SO INPUTS WORK WHILE LIVE */}
         <div className={`w-[450px] h-16 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center p-2 gap-2 shadow-lg transition`}>
             {/* Toggle Buttons */}
             <div className="flex flex-col gap-1 pr-2 border-r border-white/5">
@@ -300,7 +327,6 @@ export default function Host() {
                             <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Local File</span>
                             <span className="text-sm font-bold text-white truncate max-w-[200px]">{mediaReady && videoRef.current?.src.startsWith('blob') ? "File Loaded" : "Select File"}</span>
                         </div>
-                        {/* ✅ ENABLED INPUT */}
                         <input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" />
                     </label>
                 ) : (
