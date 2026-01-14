@@ -23,7 +23,6 @@ export default function Host() {
   const [showChat, setShowChat] = useState(true);
   const [inviteCopied, setInviteCopied] = useState(false);
   
-  // ✅ Clean Source Selection (File or Link)
   const [sourceType, setSourceType] = useState('FILE'); 
   const [urlInput, setUrlInput] = useState("");
 
@@ -122,6 +121,7 @@ export default function Host() {
       }
   };
 
+  // ✅ UPDATED: Handle File Switch while Live
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -130,24 +130,37 @@ export default function Host() {
       setTimeout(() => { 
           if(videoRef.current) { 
               videoRef.current.src = url; 
-              setStatus("Ready"); 
+              
+              // If Live, play immediately and notify server
+              if(isBroadcasting) {
+                  videoRef.current.play();
+                  socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
+              } else {
+                  setStatus("Ready"); 
+              }
           }
       }, 50);
     }
   };
 
+  // ✅ UPDATED: Handle Link Switch while Live
   const handleUrlLoad = (e) => {
       e.preventDefault();
       if(!urlInput.trim()) return;
 
-      // 1. Force the video player to appear
       setMediaReady(true);
 
-      // 2. Wait a moment for React to render the <video> tag
       setTimeout(() => {
           if (videoRef.current) {
              videoRef.current.src = urlInput;
-             setStatus("Ready");
+             
+             // If Live, play immediately and notify server
+             if(isBroadcasting) {
+                 videoRef.current.play();
+                 socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
+             } else {
+                 setStatus("Ready");
+             }
           } else {
              alert("Video player failed to load. Please try again.");
           }
@@ -270,7 +283,8 @@ export default function Host() {
       
       <div className="h-24 flex items-center justify-center gap-6 bg-zinc-950 border-t border-white/5 shrink-0 z-50">
         
-        <div className={`w-[450px] h-16 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center p-2 gap-2 shadow-lg transition ${isBroadcasting ? 'opacity-50 pointer-events-none' : ''}`}>
+        {/* ✅ REMOVED 'opacity-50 pointer-events-none' SO INPUTS WORK WHILE LIVE */}
+        <div className={`w-[450px] h-16 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center p-2 gap-2 shadow-lg transition`}>
             {/* Toggle Buttons */}
             <div className="flex flex-col gap-1 pr-2 border-r border-white/5">
                 <button onClick={() => setSourceType('FILE')} className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-lg transition ${sourceType === 'FILE' ? 'bg-violet-600 text-white' : 'text-zinc-500 hover:text-white'}`}>Local</button>
@@ -286,7 +300,8 @@ export default function Host() {
                             <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Local File</span>
                             <span className="text-sm font-bold text-white truncate max-w-[200px]">{mediaReady && videoRef.current?.src.startsWith('blob') ? "File Loaded" : "Select File"}</span>
                         </div>
-                        <input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" disabled={isBroadcasting} />
+                        {/* ✅ ENABLED INPUT */}
+                        <input type="file" accept="video/mp4,video/webm" onChange={handleFileChange} className="hidden" />
                     </label>
                 ) : (
                     <form onSubmit={handleUrlLoad} className="flex items-center gap-2 w-full h-full pr-1">
