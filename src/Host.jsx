@@ -171,35 +171,33 @@ export default function Host() {
     }
   };
 
-const handleUrlLoad = (e) => {
+// ... imports remain same ...
+
+// ... inside Host component ...
+
+  // ✅ CLEAN URL HANDLER (No Server Proxy)
+  const handleUrlLoad = (e) => {
       e.preventDefault();
       if(!urlInput.trim()) return;
 
-      setMediaReady(true);
-
-      // Detect if it is a YouTube link
-      const isYouTube = urlInput.includes('youtube.com') || urlInput.includes('youtu.be');
-      
-      // If YouTube, route it through your server. If not, use link directly.
-      let finalUrl;
-      if (isYouTube) {
-          // ⚠️ REPLACE THIS WITH YOUR ACTUAL RENDER SERVER URL
-          const serverBaseUrl = 'https://watch-party-server-1o5x.onrender.com';
-          finalUrl = `${serverBaseUrl}/youtube?url=${encodeURIComponent(urlInput)}`;
-      } else {
-          finalUrl = urlInput;
+      // Check for YouTube links and warn the user
+      if (urlInput.includes('youtube.com') || urlInput.includes('youtu.be')) {
+          alert("YouTube links are not supported due to platform restrictions.\n\nPlease use a direct .mp4 link or download the video and use 'Local File'.");
+          return;
       }
+
+      setMediaReady(true);
 
       setTimeout(() => {
           if (videoRef.current) {
-             videoRef.current.src = finalUrl;
+             videoRef.current.src = urlInput;
              
              if(isBroadcasting) {
                  videoRef.current.play().catch(e => console.log("Play error:", e));
                  socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
                  
                  // Refresh stream for viewers (Hot-Swap)
-                 setTimeout(() => refreshStream(), 1000); // Increased delay slightly for network loading
+                 setTimeout(() => refreshStream(), 1000);
              } else {
                  setStatus("Ready");
              }
@@ -208,6 +206,8 @@ const handleUrlLoad = (e) => {
           }
       }, 100);
   };
+
+// ... rest of the code remains exactly the same ...
 
   const handleShare = () => {
       const inviteUrl = `${window.location.origin}/viewer/${roomId}`;
@@ -367,4 +367,5 @@ const handleUrlLoad = (e) => {
     </div>
   );
 }
+
 
