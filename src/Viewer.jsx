@@ -16,19 +16,19 @@ export default function Viewer() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [status, setStatus] = useState("Connecting...");
   const [showChat, setShowChat] = useState(true);
-  const [isPaused, setIsPaused] = useState(false);
   const [isEnded, setIsEnded] = useState(false); 
   const [isKicked, setIsKicked] = useState(false);
   const [messages, setMessages] = useState([]);
   const [hostName, setHostName] = useState("Party"); 
   
-  const [isMuted, setIsMuted] = useState(true);
   const [showUnmuteBtn, setShowUnmuteBtn] = useState(false);
   
   const videoRef = useRef();
   const myPeer = useRef();
   const nameInputRef = useRef();
   const retryInterval = useRef(null);
+  
+  // Note: We removed the strict 'receivingCall' guard to allow stream updates
   const receivingCall = useRef(false);
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
@@ -36,12 +36,10 @@ export default function Viewer() {
   const isLocallyPaused = useRef(false); 
   const isRemoteUpdate = useRef(false); 
 
-  // ✅ Initial Title
   useEffect(() => {
     document.title = "Join | PartyTime";
   }, []);
 
-  // ✅ NEW: Update Title when Host Name changes
   useEffect(() => {
     if(isLoggedIn) {
         document.title = `Watching ${hostName} | PartyTime`;
@@ -54,7 +52,6 @@ export default function Viewer() {
       if(name.trim()) { 
           setUsername(name); 
           setIsLoggedIn(true); 
-          // Note: Title will be updated by the useEffect above
       }
   };
 
@@ -78,8 +75,8 @@ export default function Viewer() {
       }, 2000);
     });
 
+    // ✅ FIXED: Allow new calls to replace the old stream (Hot-Swapping)
     myPeer.current.on('call', (call) => {
-      if (receivingCall.current) return;
       receivingCall.current = true;
       clearInterval(retryInterval.current);
       setIsEnded(false); 
@@ -87,9 +84,9 @@ export default function Viewer() {
       call.answer(); 
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
+            // Force the video element to take the new stream
             videoRef.current.srcObject = hostStream;
-            videoRef.current.muted = true;
-            setIsMuted(true);
+            videoRef.current.muted = true; // Required for autoplay
             
             videoRef.current.play()
             .then(() => {
@@ -193,7 +190,6 @@ export default function Viewer() {
   const unmuteVideo = () => {
       if (videoRef.current) {
           videoRef.current.muted = false;
-          setIsMuted(false);
           setShowUnmuteBtn(false);
       }
   };
@@ -219,7 +215,7 @@ export default function Viewer() {
               <form onSubmit={handleLogin} className="z-10 bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl border border-white/10 flex flex-col gap-6 w-96 shadow-2xl relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-violet-500 to-fuchsia-500"></div>
                   <div className="text-center"><div className="w-16 h-16 bg-violet-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎫</div><h1 className="text-3xl font-bold text-white tracking-tight mb-2">Join Party</h1><div className="bg-black/50 p-2 rounded-lg border border-white/5 inline-flex items-center gap-2 text-zinc-400 text-xs font-mono mt-2"><span>{roomId}</span></div></div>
-                  <div className="flex flex-col gap-2 text-left"><label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Name</label><input ref={nameInputRef} type="text" placeholder="e.g. Viewer Harry" className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 outline-none transition" autoFocus /></div>
+                  <div className="flex flex-col gap-2 text-left"><label className="text-zinc-400 text-xs uppercase tracking-wide font-bold ml-1">Your Name</label><input ref={nameInputRef} type="text" placeholder="e.g. Viewer Vinny" className="bg-black/50 border border-zinc-700 text-white px-4 py-3 rounded-xl focus:border-violet-500 outline-none transition" autoFocus /></div>
                   <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 rounded-xl transition-all hover:scale-[1.02] shadow-lg shadow-violet-900/20">Enter Cinema</button>
               </form>
           </div>
@@ -271,4 +267,3 @@ export default function Viewer() {
     </div>
   );
 }
-
