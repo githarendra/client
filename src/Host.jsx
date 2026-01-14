@@ -4,7 +4,6 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
-// Initialize Socket
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true,
     transports: ['polling', 'websocket'], 
@@ -57,11 +56,21 @@ export default function Host() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ OPTIMIZATION 1: ROBUST STUN SERVERS
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
       secure: true,
-      path: '/peerjs' 
+      path: '/peerjs',
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
+        ]
+      }
     });
 
     myPeer.current.on('open', (id) => {
@@ -122,15 +131,14 @@ export default function Host() {
       }
   };
 
-  // ✅ CRITICAL: This Function was missing!
-  // It grabs the new video stream and re-connects all users to it.
   const refreshStream = () => {
       const video = videoRef.current;
       if (!video || !isBroadcasting) return;
 
       let newStream;
-      if (video.captureStream) newStream = video.captureStream(30);
-      else if (video.mozCaptureStream) newStream = video.mozCaptureStream(30);
+      // ✅ OPTIMIZATION 2: LOWER FPS (24) FOR BANDWIDTH SAVING
+      if (video.captureStream) newStream = video.captureStream(24);
+      else if (video.mozCaptureStream) newStream = video.mozCaptureStream(24);
 
       if (newStream) {
           streamRef.current = newStream;
@@ -160,7 +168,6 @@ export default function Host() {
               if(isBroadcasting) {
                   videoRef.current.play();
                   socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
-                  // ✅ Triggers Hot-Swap
                   setTimeout(() => refreshStream(), 500);
               } else {
                   setStatus("Ready"); 
@@ -174,7 +181,6 @@ export default function Host() {
       e.preventDefault();
       if(!urlInput.trim()) return;
 
-      // ⚠️ Simple check to prevent errors with raw YouTube links
       if (urlInput.includes('youtube.com') || urlInput.includes('youtu.be')) {
           alert("YouTube links are not supported directly. Please use a direct .mp4 link.");
           return;
@@ -189,7 +195,6 @@ export default function Host() {
              if(isBroadcasting) {
                  videoRef.current.play();
                  socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
-                 // ✅ Triggers Hot-Swap
                  setTimeout(() => refreshStream(), 1000);
              } else {
                  setStatus("Ready");
@@ -213,8 +218,9 @@ export default function Host() {
         video.muted = false;
         let stream;
         
-        if (video.captureStream) stream = video.captureStream(30);
-        else if (video.mozCaptureStream) stream = video.mozCaptureStream(30);
+        // ✅ OPTIMIZATION 2: USE 24 FPS (CINEMA STANDARD) TO SAVE DATA
+        if (video.captureStream) stream = video.captureStream(24);
+        else if (video.mozCaptureStream) stream = video.mozCaptureStream(24);
         else throw new Error("Browser not supported. Use Chrome or Firefox.");
         
         streamRef.current = stream; 
