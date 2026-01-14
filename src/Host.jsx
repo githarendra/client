@@ -4,6 +4,7 @@ import Peer from 'peerjs';
 import io from 'socket.io-client';
 import Chat from './Chat';
 
+// Initialize Socket
 const socket = io('https://watch-party-server-1o5x.onrender.com', { 
     withCredentials: true,
     transports: ['polling', 'websocket'], 
@@ -121,12 +122,12 @@ export default function Host() {
       }
   };
 
-  // ✅ NEW FUNCTION: Force-updates the stream for all connected users
+  // ✅ CRITICAL: This Function was missing!
+  // It grabs the new video stream and re-connects all users to it.
   const refreshStream = () => {
       const video = videoRef.current;
       if (!video || !isBroadcasting) return;
 
-      // 1. Capture the NEW video stream
       let newStream;
       if (video.captureStream) newStream = video.captureStream(30);
       else if (video.mozCaptureStream) newStream = video.mozCaptureStream(30);
@@ -134,13 +135,11 @@ export default function Host() {
       if (newStream) {
           streamRef.current = newStream;
           
-          // 2. Loop through all existing PeerJS connections and call them again
           if(myPeer.current && myPeer.current.connections) {
               Object.keys(myPeer.current.connections).forEach(peerId => {
                   const connections = myPeer.current.connections[peerId];
                   if(connections && connections.length > 0) {
                       try {
-                        // Calling them again replaces their stream automatically
                         myPeer.current.call(peerId, newStream);
                       } catch(e) { console.log("Refresh failed for", peerId); }
                   }
@@ -161,7 +160,7 @@ export default function Host() {
               if(isBroadcasting) {
                   videoRef.current.play();
                   socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
-                  // ✅ REFRESH STREAM FOR VIEWERS
+                  // ✅ Triggers Hot-Swap
                   setTimeout(() => refreshStream(), 500);
               } else {
                   setStatus("Ready"); 
@@ -171,18 +170,13 @@ export default function Host() {
     }
   };
 
-// ... imports remain same ...
-
-// ... inside Host component ...
-
-  // ✅ CLEAN URL HANDLER (No Server Proxy)
   const handleUrlLoad = (e) => {
       e.preventDefault();
       if(!urlInput.trim()) return;
 
-      // Check for YouTube links and warn the user
+      // ⚠️ Simple check to prevent errors with raw YouTube links
       if (urlInput.includes('youtube.com') || urlInput.includes('youtu.be')) {
-          alert("YouTube links are not supported due to platform restrictions.\n\nPlease use a direct .mp4 link or download the video and use 'Local File'.");
+          alert("YouTube links are not supported directly. Please use a direct .mp4 link.");
           return;
       }
 
@@ -193,10 +187,9 @@ export default function Host() {
              videoRef.current.src = urlInput;
              
              if(isBroadcasting) {
-                 videoRef.current.play().catch(e => console.log("Play error:", e));
+                 videoRef.current.play();
                  socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
-                 
-                 // Refresh stream for viewers (Hot-Swap)
+                 // ✅ Triggers Hot-Swap
                  setTimeout(() => refreshStream(), 1000);
              } else {
                  setStatus("Ready");
@@ -206,8 +199,6 @@ export default function Host() {
           }
       }, 100);
   };
-
-// ... rest of the code remains exactly the same ...
 
   const handleShare = () => {
       const inviteUrl = `${window.location.origin}/viewer/${roomId}`;
@@ -367,5 +358,3 @@ export default function Host() {
     </div>
   );
 }
-
-
