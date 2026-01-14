@@ -171,21 +171,35 @@ export default function Host() {
     }
   };
 
-  const handleUrlLoad = (e) => {
+const handleUrlLoad = (e) => {
       e.preventDefault();
       if(!urlInput.trim()) return;
 
       setMediaReady(true);
 
+      // Detect if it is a YouTube link
+      const isYouTube = urlInput.includes('youtube.com') || urlInput.includes('youtu.be');
+      
+      // If YouTube, route it through your server. If not, use link directly.
+      let finalUrl;
+      if (isYouTube) {
+          // ⚠️ REPLACE THIS WITH YOUR ACTUAL RENDER SERVER URL
+          const serverBaseUrl = 'https://watch-party-server-1o5x.onrender.com';
+          finalUrl = `${serverBaseUrl}/youtube?url=${encodeURIComponent(urlInput)}`;
+      } else {
+          finalUrl = urlInput;
+      }
+
       setTimeout(() => {
           if (videoRef.current) {
-             videoRef.current.src = urlInput;
+             videoRef.current.src = finalUrl;
              
              if(isBroadcasting) {
-                 videoRef.current.play();
+                 videoRef.current.play().catch(e => console.log("Play error:", e));
                  socket.emit('video-sync', { roomId, type: 'PLAY', time: 0 });
-                 // ✅ REFRESH STREAM FOR VIEWERS
-                 setTimeout(() => refreshStream(), 500);
+                 
+                 // Refresh stream for viewers (Hot-Swap)
+                 setTimeout(() => refreshStream(), 1000); // Increased delay slightly for network loading
              } else {
                  setStatus("Ready");
              }
@@ -353,3 +367,4 @@ export default function Host() {
     </div>
   );
 }
+
