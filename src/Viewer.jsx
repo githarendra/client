@@ -28,7 +28,6 @@ export default function Viewer() {
   const nameInputRef = useRef();
   const retryInterval = useRef(null);
   
-  // Note: We removed the strict 'receivingCall' guard to allow stream updates
   const receivingCall = useRef(false);
   
   const hostState = useRef({ type: 'PAUSE', time: 0 }); 
@@ -58,11 +57,21 @@ export default function Viewer() {
   useEffect(() => {
     if(!isLoggedIn) return;
 
+    // ✅ OPTIMIZATION: ROBUST STUN SERVERS
     myPeer.current = new Peer(undefined, {
       host: 'watch-party-server-1o5x.onrender.com',
       port: 443,
       secure: true,
-      path: '/peerjs' 
+      path: '/peerjs',
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
+        ]
+      }
     });
     
     myPeer.current.on('open', (id) => {
@@ -75,7 +84,6 @@ export default function Viewer() {
       }, 2000);
     });
 
-    // ✅ FIXED: Allow new calls to replace the old stream (Hot-Swapping)
     myPeer.current.on('call', (call) => {
       receivingCall.current = true;
       clearInterval(retryInterval.current);
@@ -84,9 +92,8 @@ export default function Viewer() {
       call.answer(); 
       call.on('stream', (hostStream) => {
         if(videoRef.current) {
-            // Force the video element to take the new stream
             videoRef.current.srcObject = hostStream;
-            videoRef.current.muted = true; // Required for autoplay
+            videoRef.current.muted = true; 
             
             videoRef.current.play()
             .then(() => {
